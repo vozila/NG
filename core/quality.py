@@ -12,7 +12,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-From core.registry import enabled_features
+
+from core.registry import enabled_features
 
 REPORT_PATH = Path("ops/QUALITY_REPORTS/latest_regression.json")
 
@@ -33,7 +34,8 @@ def run_regression() -> dict[str, Any]:
                 msg = getattr(out, "message", None)
         except Exception as e:
             passed = False
-            msg = f"{type(e).__name__}: {e}"
+            msg = f"{type(e).name}: {e}"
+
         dt_ms = (time.perf_counter() - t0) * 1000.0
         ok = ok and passed
         results.append({"feature": key, "ok": passed, "ms": round(dt_ms, 2), "message": msg})
