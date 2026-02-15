@@ -1,0 +1,23 @@
+{
+  "status": "ok",
+  "ts": 1771190032,
+  "enabled_features": [
+    "admin_quality",
+    "sample"
+  ],
+  "results": [
+    {
+      "feature": "admin_quality",
+      "ok": true,
+      "ms": 100.19,
+      "message": "regression executed"
+    },
+    {
+      "feature": "sample",
+      "ok": true,
+      "ms": 0.0,
+      "message": "sample selftest ok"
+    }
+  ],
+  "report_path": "ops/QUALITY_REPORTS/latest_regression.json"
+}
