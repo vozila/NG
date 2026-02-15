@@ -12,7 +12,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-From core.registry import enabled_features
+
+from core.registry import enabled_features
+
 
 REPORT_PATH = Path("ops/QUALITY_REPORTS/latest_regression.json")
 
@@ -25,8 +27,10 @@ def run_regression() -> dict[str, Any]:
         t0 = time.perf_counter()
         try:
             out = spec.selftests()
-            passed = bool(getattr(out, "ok", out.get("ok", True) if isinstance(out, dict) else True))
-            msg = getattr(out, "message", None) if not isinstance(out, dict) else out.get("message")
+            passed = bool(
+                getattr(out, "ok", out.get("ok", True) if isinstance(out, dict) else True)
+            )
+            msg = getattr(out, "message", None) fif not isinstance(out, dict) else out.get("message")
         except Exception as e:
             passed = False
             msg = f"{type(e).name}: {e}"
