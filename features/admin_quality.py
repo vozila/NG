@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-From core.quality import run_regression
+from core.quality import run_regression
 
 router = APIRouter( prefix="/admin/quality", tags=["quality"] )
 
@@ -29,7 +29,6 @@ def security_checks() -> dict:
     # MVP: admin auth hook to be added by Core Maintainer before prod.
     return {"ok": True, "message": "admin endpoints must be auth-guarded in prod"}
 
-
 def load_profile() -> dict:
     return {"hint": "admin-only", "p50_ms": 20, "p95_ms": 200}
 
@@ -41,4 +40,4 @@ FEATURE = {
     "selftests": selftests,
     "security_checks": security_checks,
     "load_profile": load_profile,
-}
+  }
