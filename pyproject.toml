@@ -1,0 +1,22 @@
+[project]
+name = "vozlia-ng"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "pydantic",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff",
+  "pytest",
+  "httx",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
