@@ -12,18 +12,21 @@ dependencies = [
 dev = [
   "ruff",
   "pytest",
-  "httx",
+  "httpx",
 ]
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["core", "features"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "features*"]
+exclude = ["ops*", "scripts*", "tests*", ".agents*"]
 
 [tool.ruff]
 line-length = 100
+extend-exclude = [".venv", ".git", "ops", ".agents"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
