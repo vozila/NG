@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 
-@dataclass=True, frozen=True)
+@dataclass(frozen=True)
 class FeatureSpec:
     key: str
     enabled_env: str
