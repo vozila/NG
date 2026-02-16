@@ -2,10 +2,22 @@
 
 Writes: ops/QUALITY_REPORTS/latest_regression.json
 Exit: 0 if all ok, 2 otherwise.
+
+Supported invocation from repo root:
+  python scripts/run_regression.py
 """
 
-from core.app import create_app
-from core.quality import run_regression
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from core.app import create_app  # noqa: E402
+from core.quality import run_regression  # noqa: E402
 
 
 def main() -> int:
