@@ -18,8 +18,7 @@
 - Debug logs only when `VOZLIA_DEBUG=1`.
 - Before merge: compileall + ruff + pytest + regression.
 
+## Outstanding tasks
 TASK-0200: Stabilize quality rails (scripts + admin_quality fix; core fix via CORE-CHANGE PR)
-
 TASK-0201: Implement Flow A OpenAI Realtime bridge (flagged)
-
 TASK-0202: Implement barge-in + pacing/backlog caps + deterministic tests (flagged)
