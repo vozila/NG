@@ -17,3 +17,4 @@
 - Every feature behind `VOZ_FEATURE_<NAME>` default OFF.
 - Debug logs only when `VOZLIA_DEBUG=1`.
 - Before merge: compileall + ruff + pytest + regression.
+
