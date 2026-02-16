@@ -1,298 +1,418 @@
 """VOZLIA FILE PURPOSE
-Purpose: Twilio Media Streams skeleton for Voice Flow A (Slice A+B).
-Hot path: yes (websocket loop must stay lightweight and deterministic).
-Feature flags: VOZ_FEATURE_VOICE_FLOW_A, VOZLIA_DEBUG.
-Failure mode: malformed events are ignored; connection remains stable.
+Purpose: Voice Flow A bridge MVP (Twilio Media Streams <-> OpenAI Realtime).
+Hot path: yes (streaming loop; async-only, no DB, no blocking calls).
+Feature flags: VOZ_FEATURE_VOICE_FLOW_A.
+Failure mode: if OpenAI realtime is not configured/reachable, Twilio stream stays up and exits cleanly.
 """
 
 from __future__ import annotations
 
-import base64
-import binascii
+import asyncio
 import json
 import os
-import time
-from collections.abc import Iterator
-from contextlib import contextmanager
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Protocol
 
-from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
-from starlette.websockets import WebSocketState
+from fastapi import APIRouter, WebSocket
+from starlette.websockets import WebSocketDisconnect
 
-from core.config import env_flag, is_debug
-from core.feature_loader import load_features
+from core.config import is_debug
 from core.logging import logger
 
 router = APIRouter()
 
-VOICE_WAIT_SOUND_TRIGGER_MS = int(os.getenv("VOICE_WAIT_SOUND_TRIGGER_MS", "800") or 800)
-_TENANT_ID_ALLOWLIST = ("tenant_id",)
+_ENV_REALTIME_URL = "VOZ_OPENAI_REALTIME_URL"
+_ENV_OPENAI_API_KEY = "VOZ_OPENAI_API_KEY"
+_ENV_OPENAI_MODEL = "VOZ_OPENAI_REALTIME_MODEL"
 
 
-def _clean_str(v: Any) -> str | None:
-    if not isinstance(v, str):
-        return None
-    s = v.strip()
-    return s or None
+@dataclass
+class SelfTestResult:
+    ok: bool
+    message: str = ""
 
 
-def parse_twilio_start(d: dict) -> dict:
-    start = d.get("start")
-    start_obj = start if isinstance(start, dict) else {}
-    custom = start_obj.get("customParameters")
-    custom_obj = custom if isinstance(custom, dict) else {}
-
-    tenant_id = None
-    for k in _TENANT_ID_ALLOWLIST:
-        tenant_id = _clean_str(custom_obj.get(k))
-        if tenant_id:
-            break
-
-    return {
-        "streamSid": _clean_str(start_obj.get("streamSid")) or _clean_str(d.get("streamSid")),
-        "callSid": _clean_str(start_obj.get("callSid")) or _clean_str(d.get("callSid")),
-        "from_number": _clean_str(start_obj.get("from")) or _clean_str(custom_obj.get("from_number")),
-        "tenant_id": tenant_id,
-    }
+@dataclass
+class BridgeState:
+    connected: bool = False
+    started: bool = False
+    speaking: bool = False
+    stream_sid: str = ""
+    call_sid: str = ""
+    inbound_frames: int = 0
+    outbound_frames: int = 0
+    inbound_buffer: list[str] = field(default_factory=list)
+    outbound_buffer: list[str] = field(default_factory=list)
 
 
-def parse_twilio_media(d: dict) -> bytes | None:
-    media = d.get("media")
-    if not isinstance(media, dict):
-        return None
-    payload = media.get("payload")
-    if not isinstance(payload, str):
-        return None
-    try:
-        return base64.b64decode(payload, validate=True)
-    except (ValueError, binascii.Error):
+class RealtimeClient(Protocol):
+    async def connect(self) -> None: ...
+
+    async def send_input_audio(self, payload_b64: str) -> None: ...
+
+    async def iter_events(self): ...
+
+    async def close(self) -> None: ...
+
+
+class NullRealtimeClient:
+    """No-op fallback when realtime is not configured."""
+
+    async def connect(self) -> None:
         return None
 
+    async def send_input_audio(self, payload_b64: str) -> None:
+        return None
 
-def is_twilio_stop(d: dict) -> bool:
-    return d.get("event") == "stop"
+    async def iter_events(self):
+        if False:
+            yield None
 
-
-@contextmanager
-def _temp_env(values: dict[str, str | None]) -> Iterator[None]:
-    old: dict[str, str | None] = {}
-    for k, v in values.items():
-        old[k] = os.getenv(k)
-        if v is None:
-            os.environ.pop(k, None)
-        else:
-            os.environ[k] = v
-    try:
-        yield
-    finally:
-        for k, v in old.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
+    async def close(self) -> None:
+        return None
 
 
-@router.websocket("/twilio/stream")
-async def twilio_stream(websocket: WebSocket) -> None:
-    await websocket.accept()
+class OpenAIRealtimeWebSocketClient:
+    """Thin adapter over websocket-json protocol for OpenAI realtime."""
 
-    stream_sid: str | None = None
-    call_sid: str | None = None
-    from_number: str | None = None
-    tenant_id: str | None = None
+    def __init__(self, *, url: str, api_key: str, model: str | None) -> None:
+        self._url = url
+        self._api_key = api_key
+        self._model = model
+        self._conn: Any = None
 
-    waiting_audio_active: bool = False
-    waiting_started_ms: int | None = None
+    async def connect(self) -> None:
+        try:
+            import websockets
+        except ImportError as exc:  # pragma: no cover - depends on runtime extras
+            raise RuntimeError("websockets package not available") from exc
 
-    def notify_wait_start(reason: str) -> None:
-        nonlocal waiting_audio_active, waiting_started_ms
-        if waiting_audio_active:
+        url = self._url
+        if self._model and "model=" not in url:
+            sep = "&" if "?" in url else "?"
+            url = f"{url}{sep}model={self._model}"
+
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "OpenAI-Beta": "realtime=v1",
+        }
+        self._conn = await websockets.connect(url, additional_headers=headers)
+
+    async def send_input_audio(self, payload_b64: str) -> None:
+        if self._conn is None:
             return
-        waiting_audio_active = True
-        waiting_started_ms = int(time.monotonic() * 1000)
-        if is_debug():
-            logger.info(
-                "VOICE_WAIT_START reason=%s streamSid=%s callSid=%s", reason, stream_sid, call_sid
-            )
+        event = {"type": "input_audio_buffer.append", "audio": payload_b64}
+        await self._conn.send(json.dumps(event))
 
-    def notify_wait_end() -> None:
-        nonlocal waiting_audio_active, waiting_started_ms
-        if not waiting_audio_active:
+    async def iter_events(self):
+        if self._conn is None:
             return
-        elapsed = (
-            int(time.monotonic() * 1000) - waiting_started_ms if waiting_started_ms is not None else 0
-        )
-        if is_debug():
-            logger.info(
-                "VOICE_WAIT_END elapsed_ms=%s streamSid=%s callSid=%s",
-                elapsed,
-                stream_sid,
-                call_sid,
-            )
-        waiting_audio_active = False
-        waiting_started_ms = None
+        while True:
+            raw = await self._conn.recv()
+            try:
+                yield json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+    async def close(self) -> None:
+        if self._conn is not None:
+            await self._conn.close()
+            self._conn = None
+
+
+class StubRealtimeClient:
+    """Deterministic stub used by module selftests."""
+
+    def __init__(self, response_payload: str = "c3R1Yi1hdWRpbw==") -> None:
+        self.connected = False
+        self.closed = False
+        self.sent_audio: list[str] = []
+        self._response_payload = response_payload
+        self._queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+    async def connect(self) -> None:
+        self.connected = True
+
+    async def send_input_audio(self, payload_b64: str) -> None:
+        self.sent_audio.append(payload_b64)
+        await self._queue.put({"type": "response.output_audio.delta", "delta": self._response_payload})
+
+    async def iter_events(self):
+        while True:
+            event = await self._queue.get()
+            if event is None:
+                break
+            yield event
+
+    async def close(self) -> None:
+        self.closed = True
+        await self._queue.put(None)
+
+
+def _debug(msg: str, **fields: Any) -> None:
+    if is_debug():
+        parts = [msg] + [f"{k}={v}" for k, v in fields.items()]
+        logger.info(" ".join(parts))
+
+
+def _event_name(ev: dict[str, Any]) -> str:
+    return str(ev.get("event", "")).strip().lower()
+
+
+def _twilio_media_payload(ev: dict[str, Any]) -> str:
+    media = ev.get("media")
+    if isinstance(media, dict):
+        payload = media.get("payload")
+        if isinstance(payload, str):
+            return payload
+    return ""
+
+
+def _twilio_start_ids(ev: dict[str, Any]) -> tuple[str, str]:
+    start = ev.get("start")
+    if not isinstance(start, dict):
+        return "", ""
+    stream_sid = str(start.get("streamSid", "") or "")
+    call_sid = str(start.get("callSid", "") or "")
+    return stream_sid, call_sid
+
+
+def _openai_audio_delta(ev: dict[str, Any]) -> str:
+    if str(ev.get("type", "")) != "response.output_audio.delta":
+        return ""
+    delta = ev.get("delta")
+    return delta if isinstance(delta, str) else ""
+
+
+def _openai_done(ev: dict[str, Any]) -> bool:
+    return str(ev.get("type", "")) in {"response.output_audio.done", "response.done"}
+
+
+def _realtime_configured() -> bool:
+    return bool((os.getenv(_ENV_REALTIME_URL) or "").strip() and (os.getenv(_ENV_OPENAI_API_KEY) or "").strip())
+
+
+def _build_realtime_client() -> RealtimeClient:
+    url = (os.getenv(_ENV_REALTIME_URL) or "").strip()
+    key = (os.getenv(_ENV_OPENAI_API_KEY) or "").strip()
+    model = (os.getenv(_ENV_OPENAI_MODEL) or "").strip() or None
+    if not (url and key):
+        return NullRealtimeClient()
+    return OpenAIRealtimeWebSocketClient(url=url, api_key=key, model=model)
+
+
+async def _pump_openai_audio_to_twilio(
+    twilio_ws: WebSocket,
+    realtime: RealtimeClient,
+    state: BridgeState,
+) -> None:
+    async for ev in realtime.iter_events():
+        payload = _openai_audio_delta(ev)
+        if payload and state.stream_sid:
+            out = {"event": "media", "streamSid": state.stream_sid, "media": {"payload": payload}}
+            await twilio_ws.send_text(json.dumps(out))
+            state.speaking = True
+            state.outbound_frames += 1
+            state.outbound_buffer.append(payload)
+            if len(state.outbound_buffer) > 8:
+                state.outbound_buffer.pop(0)
+        elif _openai_done(ev):
+            state.speaking = False
+
+
+async def _bridge_stream(
+    twilio_ws: WebSocket,
+    *,
+    realtime_factory: Any = _build_realtime_client,
+) -> BridgeState:
+    state = BridgeState()
+    await twilio_ws.accept()
+
+    realtime: RealtimeClient | None = None
+    pump_task: asyncio.Task[Any] | None = None
 
     try:
         while True:
             try:
-                raw = await websocket.receive_text()
+                raw = await twilio_ws.receive_text()
             except WebSocketDisconnect:
+                _debug("VOICE_FLOW_A twilio_disconnect")
                 break
 
             try:
-                data = json.loads(raw)
+                event = json.loads(raw)
             except json.JSONDecodeError:
-                if is_debug():
-                    logger.info("TWILIO_WS_BAD_JSON")
+                _debug("VOICE_FLOW_A bad_json")
+                continue
+            if not isinstance(event, dict):
                 continue
 
-            if not isinstance(data, dict):
+            name = _event_name(event)
+            if name == "connected":
+                state.connected = True
+                _debug("VOICE_FLOW_A connected")
                 continue
 
-            event = data.get("event")
-            if event == "connected":
-                if is_debug():
-                    logger.info("TWILIO_WS_CONNECTED")
+            if name == "start":
+                state.started = True
+                stream_sid, call_sid = _twilio_start_ids(event)
+                state.stream_sid = stream_sid
+                state.call_sid = call_sid
+                _debug("VOICE_FLOW_A start", stream_sid=stream_sid, call_sid=call_sid)
+
+                if realtime is None and _realtime_configured():
+                    realtime = realtime_factory()
+                    await realtime.connect()
+                    pump_task = asyncio.create_task(_pump_openai_audio_to_twilio(twilio_ws, realtime, state))
                 continue
 
-            if event == "start":
-                start_info = parse_twilio_start(data)
-                stream_sid = start_info["streamSid"]
-                call_sid = start_info["callSid"]
-                from_number = start_info["from_number"]
-                tenant_id = start_info["tenant_id"]
-                if is_debug():
-                    logger.info(
-                        "TWILIO_WS_START streamSid=%s callSid=%s from=%s tenant=%s",
-                        stream_sid,
-                        call_sid,
-                        from_number,
-                        tenant_id,
-                    )
+            if name == "media":
+                payload = _twilio_media_payload(event)
+                if payload:
+                    state.inbound_frames += 1
+                    state.inbound_buffer.append(payload)
+                    if len(state.inbound_buffer) > 8:
+                        state.inbound_buffer.pop(0)
+                    if realtime is not None:
+                        await realtime.send_input_audio(payload)
                 continue
 
-            if event == "media":
-                media_bytes = parse_twilio_media(data)
-                if media_bytes is None:
-                    if is_debug():
-                        logger.info("TWILIO_WS_MEDIA_INVALID streamSid=%s", stream_sid)
-                    continue
-                _ = media_bytes
-
-                if waiting_audio_active and waiting_started_ms is not None:
-                    elapsed = int(time.monotonic() * 1000) - waiting_started_ms
-                    if elapsed >= VOICE_WAIT_SOUND_TRIGGER_MS and is_debug():
-                        logger.info(
-                            "VOICE_WAIT_THRESHOLD_REACHED elapsed_ms=%s threshold_ms=%s",
-                            elapsed,
-                            VOICE_WAIT_SOUND_TRIGGER_MS,
-                        )
-                continue
-
-            if is_twilio_stop(data):
-                if is_debug():
-                    logger.info("TWILIO_WS_STOP streamSid=%s callSid=%s", stream_sid, call_sid)
-                notify_wait_end()
+            if name == "stop":
+                _debug("VOICE_FLOW_A stop", stream_sid=state.stream_sid)
+                await asyncio.sleep(0)
                 break
-
     finally:
-        notify_wait_end()
-        if websocket.client_state == WebSocketState.CONNECTED:
-            await websocket.close()
+        if pump_task is not None:
+            pump_task.cancel()
+            try:
+                await pump_task
+            except asyncio.CancelledError:
+                pass
+        if realtime is not None:
+            await realtime.close()
 
-        _ = from_number
-        _ = tenant_id
-        _ = notify_wait_start
-
-
-def _has_ws_route(app: FastAPI, path: str) -> bool:
-    for route in app.routes:
-        if getattr(route, "path", None) == path:
-            return True
-    return False
+    return state
 
 
-def selftests() -> dict:
-    start_evt = {
+@router.websocket("/twilio/stream")
+async def twilio_stream(ws: WebSocket) -> None:
+    await _bridge_stream(ws)
+
+
+class _FakeTwilioSocket:
+    def __init__(self, incoming_events: list[dict[str, Any]]) -> None:
+        self._incoming = [json.dumps(ev) for ev in incoming_events]
+        self._idx = 0
+        self.sent_text: list[str] = []
+        self.accepted = False
+
+    async def accept(self) -> None:
+        self.accepted = True
+
+    async def receive_text(self) -> str:
+        if self._idx >= len(self._incoming):
+            raise WebSocketDisconnect(code=1000)
+        raw = self._incoming[self._idx]
+        self._idx += 1
+        await asyncio.sleep(0)
+        return raw
+
+    async def send_text(self, text: str) -> None:
+        self.sent_text.append(text)
+
+
+def selftests() -> SelfTestResult:
+    async def _run() -> SelfTestResult:
+        stub = StubRealtimeClient(response_payload="b3V0LWF1ZGlv")
+        fake_ws = _FakeTwilioSocket(
+            [
+                {"event": "connected"},
+                {
+                    "event": "start",
+                    "start": {"streamSid": "MZ-stream-01", "callSid": "CA-call-01"},
+                },
+                {"event": "media", "media": {"payload": "aW4tYXVkaW8="}},
+                {"event": "stop"},
+            ]
+        )
+
+        prev_url = os.getenv(_ENV_REALTIME_URL)
+        prev_key = os.getenv(_ENV_OPENAI_API_KEY)
+        os.environ[_ENV_REALTIME_URL] = "wss://stub.local/realtime"
+        os.environ[_ENV_OPENAI_API_KEY] = "stub-key"
+        try:
+            state = await _bridge_stream(fake_ws, realtime_factory=lambda: stub)
+        finally:
+            if prev_url is None:
+                os.environ.pop(_ENV_REALTIME_URL, None)
+            else:
+                os.environ[_ENV_REALTIME_URL] = prev_url
+            if prev_key is None:
+                os.environ.pop(_ENV_OPENAI_API_KEY, None)
+            else:
+                os.environ[_ENV_OPENAI_API_KEY] = prev_key
+
+        if not fake_ws.accepted:
+            return SelfTestResult(ok=False, message="ws not accepted")
+        if not state.connected or not state.started:
+            return SelfTestResult(ok=False, message="connected/start handling failed")
+        if state.inbound_frames != 1:
+            return SelfTestResult(ok=False, message="inbound media frame not tracked")
+        if not stub.closed:
+            return SelfTestResult(ok=False, message="realtime close/teardown not clean")
+        if stub.sent_audio != ["aW4tYXVkaW8="]:
+            return SelfTestResult(ok=False, message="twilio media not forwarded to realtime")
+
+        outbound = [json.loads(s) for s in fake_ws.sent_text]
+        medias = [ev for ev in outbound if ev.get("event") == "media"]
+        if len(medias) != 1:
+            return SelfTestResult(ok=False, message="expected one outbound media event")
+        payload = medias[0].get("media", {}).get("payload")
+        if payload != "b3V0LWF1ZGlv":
+            return SelfTestResult(ok=False, message="outbound media payload mismatch")
+
+        return SelfTestResult(ok=True, message="voice flow a selftests ok")
+
+    return asyncio.run(_run())
+
+
+def security_checks() -> SelfTestResult:
+    # Explicit shared-line assumption: start.customParameters are untrusted and ignored.
+    event = {
         "event": "start",
         "start": {
-            "streamSid": "MZ123",
-            "callSid": "CA123",
-            "customParameters": {
-                "tenant_id": " tenant-a ",
-                "tenant": "blocked",
-                "from_number": " +15551234567 ",
-            },
+            "streamSid": "MZ-security",
+            "callSid": "CA-security",
+            "customParameters": {"tenant_id": "evil-tenant", "auth": "bad"},
         },
     }
-    start_parsed = parse_twilio_start(start_evt)
-    if start_parsed != {
-        "streamSid": "MZ123",
-        "callSid": "CA123",
-        "from_number": "+15551234567",
-        "tenant_id": "tenant-a",
-    }:
-        return {"ok": False, "message": "parse_twilio_start failed"}
+    stream_sid, call_sid = _twilio_start_ids(event)
+    if stream_sid != "MZ-security" or call_sid != "CA-security":
+        return SelfTestResult(ok=False, message="trusted ids not extracted deterministically")
 
-    if parse_twilio_start({"event": "start", "start": {"customParameters": {"tenant": "x"}}})[
-        "tenant_id"
-    ] is not None:
-        return {"ok": False, "message": "tenant_id allowlist failed"}
+    custom_parameters = event["start"].get("customParameters")
+    if not isinstance(custom_parameters, dict):
+        return SelfTestResult(ok=False, message="security fixture invalid")
 
-    if parse_twilio_media({"event": "media", "media": {"payload": "aGVsbG8="}}) != b"hello":
-        return {"ok": False, "message": "parse_twilio_media valid payload failed"}
+    # Auth material must come only from server env, never from Twilio payloads.
+    if _realtime_configured() and not (
+        (os.getenv(_ENV_REALTIME_URL) or "").strip() and (os.getenv(_ENV_OPENAI_API_KEY) or "").strip()
+    ):
+        return SelfTestResult(ok=False, message="realtime auth source must be environment only")
 
-    if parse_twilio_media({"event": "media", "media": {"payload": "*"}}) is not None:
-        return {"ok": False, "message": "parse_twilio_media malformed payload failed"}
+    return SelfTestResult(
+        ok=True,
+        message="tenant/auth assumptions explicit: shared-line stream, no trusted tenant from Twilio payload",
+    )
 
-    if not is_twilio_stop({"event": "stop"}) or is_twilio_stop({"event": "media"}):
-        return {"ok": False, "message": "is_twilio_stop failed"}
 
-    env_reset = {
-        "VOZ_FEATURE_SAMPLE": "0",
-        "VOZ_FEATURE_ADMIN_QUALITY": "0",
+def load_profile() -> dict[str, Any]:
+    return {
+        "expected_concurrency": "small (single-digit to low tens concurrent calls)",
+        "frame_pacing": "Twilio inbound media ~20ms cadence; outbound mirrors OpenAI deltas",
+        "buffer_limits": {"inbound_recent_frames": 8, "outbound_recent_frames": 8},
+        "hot_path_constraints": ["no_db", "no_blocking_calls", "async_streaming_only"],
     }
-    with _temp_env({**env_reset, "VOZ_FEATURE_VOICE_FLOW_A": "0"}):
-        off_app = FastAPI()
-        load_features(off_app)
-        if _has_ws_route(off_app, "/twilio/stream"):
-            return {"ok": False, "message": "route mounted while feature disabled"}
-
-    with _temp_env({**env_reset, "VOZ_FEATURE_VOICE_FLOW_A": "1"}):
-        on_app = FastAPI()
-        load_features(on_app)
-        if not _has_ws_route(on_app, "/twilio/stream"):
-            return {"ok": False, "message": "route missing while feature enabled"}
-
-    return {"ok": True, "message": "voice_flow_a selftests ok"}
-
-
-def security_checks() -> dict:
-    enabled = env_flag("VOZ_FEATURE_VOICE_FLOW_A", "0")
-    raw = os.getenv("VOZ_FEATURE_VOICE_FLOW_A")
-    if raw is None and enabled:
-        return {"ok": False, "message": "VOZ_FEATURE_VOICE_FLOW_A must default OFF"}
-
-    tenant_ok = parse_twilio_start(
-        {
-            "event": "start",
-            "start": {"customParameters": {"tenant_id": " tenant-a ", "tenant": "wrong"}},
-        }
-    )["tenant_id"]
-    if tenant_ok != "tenant-a":
-        return {"ok": False, "message": "tenant_id strip/allowlist failed"}
-
-    tenant_blocked = parse_twilio_start(
-        {"event": "start", "start": {"customParameters": {"tenant": "wrong"}}}
-    )["tenant_id"]
-    if tenant_blocked is not None:
-        return {"ok": False, "message": "tenant_id must come from allowlist only"}
-
-    return {"ok": True, "message": "voice_flow_a security checks ok"}
-
-
-def load_profile() -> dict:
-    return {"hint": "ws-parse", "p50_ms": 10, "p95_ms": 50}
 
 
 FEATURE = {
