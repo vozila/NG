@@ -1,81 +1,94 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -u -o pipefail
 
-# Run NE quality gates and save output to a log file you can upload.
-# Usage:
-#   bash scripts/run_gates_record.sh
-#
-# Writes:
-#   ops/QUALITY_REPORTS/gates_<timestamp>.log
- #  ops/QUALITY_REPORTS/gates_<timestamp>.summary.json
-#  ops/QUALITY_REPORTS/regression_<timestamp>.json (snapshot of latest_regression.json)
+OUT_DIR="ops/QUALITY_REPORTS"
+TS="$(date +%Y%m%d_%H%M%S)"
+LOG_PATH="${OUT_DIR}/gates_${TS}.log"
+SUMMARY_PATH="${OUT_DIR}/gates_${TS}.summary.json"
+REGRESSION_PATH="${OUT_DIR}/regression_${TS}.json"
+LATEST_REGRESSION_PATH="${OUT_DIR}/latest_regression.json"
 
-REPO_ROOT="$(pwd)"
-if [ ! -f "$REPO_ROOT/pyproject.toml" ] || [ ! -d "$REPO_ROOT/core" ] || [ ! -d "$REPO_ROOT/features" ]; then
-  echo "ERROR: run from NG repo root (where pyproject.toml/core/features exist)."
-  exit 2
-fi
+mkdir -p "${OUT_DIR}"
+touch "${LOG_PATH}"
 
-TS="$(date +%Y%m%d_%H%M_US)"
-OUTDIR="ops/QUALITY_REPORTS"
-LOG="$OUTDIR/gates_${TS}.log"
-SUM="$OUTDIR/gates_${TS}.summary.json"
-REG_SNAP="$OUTDIR/regression_${TS}.json"
+trap 'rc=$?; if [ "${rc}" -ne 0 ]; then echo "run_gates_record failed with exit code ${rc}" | tee -a "${LOG_PATH}"; fi' EXIT
 
-mkdir -p "$OUTDIR"
-
-echo "=== Vozlia NG Gate Run ===" | tee "$LOG"
-echo "ts=$TS" | tee -a "$LOG"
-echo "pwd=$REPO_ROOT" | tee -a "$LOG"
-echo "git=$(git rev-parse --short HEAD 2>/dev/null || echo 'n/a')" | tee -a "$LOG"
-echo "python=$(python --version 2>/dev/null || echo 'python-not-found')" | tee -a "$LOG"
-echo "" | tee -a "$LOG"
+STEP_NAMES=()
+STEP_CODES=()
 
 run_step() {
-  local name="$1"; shift
-  echo "" | tee -a "$LOG"
-  echo ">> STEP: $name" | tee -a "$LOG"
-  ( "$@" ) 2>&1 | tee -a "$LOG"
+  local name="$1"
+  shift
+  echo "== ${name}" | tee -a "${LOG_PATH}"
+  "$@" >>"${LOG_PATH}" 2>&1
+  local rc=$?
+  STEP_NAMES+=("${name}")
+  STEP_CODES+=("${rc}")
+  if [ "${rc}" -eq 0 ]; then
+    echo "${name}: ok" | tee -a "${LOG_PATH}"
+  else
+    echo "${name}: fail (${rc})" | tee -a "${LOG_PATH}"
+  fi
 }
 
-status="ok"
-trap 'status="fail"; echo "! FAILED at step: ${name:-unknown}" | tee -a "$LOG"' ERR
-
-name="compileall"
-run_step "compileall" python -m compileall core features scripts main.py
-
-name="ruff"
-run_step "ruff" python -m ruff check core features scripts tests main.py
-
-name="pytest"
+run_step "compileall" python -m compileall .
+run_step "ruff" python -m ruff check .
 run_step "pytest" pytest -q
+run_step "feature_registry_check" python scripts/feature_registry_check.py
+run_step "run_regression" env VOZ_FEATURE_SAMPLE=1 VOZ_FEATURE_ADMIN_QUALITY=1 python scripts/run_regression.py
 
-name="feature_registry_check"
-run_step "feature_registry_check" python scripts/feature_registry_checck.py
-
-name="regression"
-run_step "regression" env VOZ_FEATURE_ADMIN_QUALITY=1 VOZ_FEATURE_SAMPLE=1 python scripts/run_regression.py
-
-if [ -f "ops/QUALITY_REPORTS/latest_regression.json" ]; then
-  cp "ops/QUALTY_REPORTS/latest_regression.json" "$REG_SNAP"
+if [ -f "${LATEST_REGRESSION_PATH}" ]; then
+  cp "${LATEST_REGRESSION_PATH}" "${REGRESSION_PATH}"
+  REGRESSION_AVAILABLE=true
+else
+  REGRESSION_AVAILABLE=false
 fi
 
-python - <<PY
-import json, subprocess, time, pathlib
-ts = "${TS}"
-outdir = pathlib.Path("ops/QUALITY_REPORTS")
-sha = subprocess.check_output(["git","rev-parse","--short","HEAD"], text=True).strip()
-sum = {
-  "ts": ts,
-  "git_sha": sha,
-  "status": "${status}",
-  "log_path": str(outdir / f"gates_{ts}.log"),
-  "regression_snapshot": str(outdir / f"regression_{ts}.json"),
+STEP_NAMES_JOINED="$(printf "%s\n" "${STEP_NAMES[@]}")"
+STEP_CODES_JOINED="$(printf "%s\n" "${STEP_CODES[@]}")"
+
+export TS SUMMARY_PATH LOG_PATH REGRESSION_PATH REGRESSION_AVAILABLE STEP_NAMES_JOINED STEP_CODES_JOINED
+python - <<'PY'
+from __future__ import annotations
+
+import json
+import os
+
+names = [x for x in os.environ.get("STEP_NAMES_JOINED", "").splitlines() if x]
+codes = [int(x) for x in os.environ.get("STEP_CODES_JOINED", "").splitlines() if x]
+steps = [{"name": n, "exit_code": c, "ok": c == 0} for n, c in zip(names, codes)]
+overall_ok = all(step["ok"] for step in steps)
+
+summary = {
+    "ts": os.environ["TS"],
+    "status": "ok" if overall_ok else "fail",
+    "log_path": os.environ["LOG_PATH"],
+    "summary_path": os.environ["SUMMARY_PATH"],
+    "regression_artifact": {
+        "available": os.environ.get("REGRESSION_AVAILABLE", "false") == "true",
+        "path": os.environ["REGRESSION_PATH"],
+    },
+    "steps": steps,
 }
-out=outdir / f"gates_{ts}.summary.json"
-out.write_text(json.dumps(sum, indent=2), encoding="utf-8")
-print(out)
+
+with open(os.environ["SUMMARY_PATH"], "w", encoding="utf-8") as f:
+    json.dump(summary, f, indent=2)
 PY
 
-echo "" | tee -a "$LOG"
-echo "=== DONE status=$status ===" | tee -a "$LOG"
+cat "${SUMMARY_PATH}" | tee -a "${LOG_PATH}"
+
+if [ "${REGRESSION_AVAILABLE}" = true ]; then
+  echo "regression artifact: ${REGRESSION_PATH}" | tee -a "${LOG_PATH}"
+else
+  echo "regression artifact: not available" | tee -a "${LOG_PATH}"
+fi
+
+OVERALL_RC=0
+for rc in "${STEP_CODES[@]}"; do
+  if [ "${rc}" -ne 0 ]; then
+    OVERALL_RC=1
+    break
+  fi
+done
+
+exit "${OVERALL_RC}"
