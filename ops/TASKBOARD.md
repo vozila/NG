@@ -3,17 +3,14 @@
 
 ## DONE
 - [x] Day 0 Milestone: NG skeleton + loader + registry + admin_quality + sample + scripts + gates green
+- [x] TASK-0100 — Voice Flow A WS skeleton + waiting-audio hooks (Slice A+B)
+- [x] TASK-0101 — Shared line access gate (out-of-band HTTP FSM)
+- [x] TASK-0102 — WhatsApp inbound adapter stub
 
-## NOW (Day 1 — start after Day 0 green)
-- [ ] TASK-0100 — Voice Flow A WS skeleton + waiting-audio hooks (Slice A+B)
-  - Spec: `.agents/tasks/TASK-0100.md`
-  - Owner: Codex Agent (Voice)
-- [ ] TASK-0101 — Shared line access gate (state machine, out-of-band HTTP)
-  - Spec: `.agents/tasks/TASK-0101.md`
-  - Owner: Codex Agent (Access)
-- [ ] TASK-0102 — WhatsApp inbound adapter (minimal) -> unified engine stub
-  - Spec: `.agents/tasks/TASK-0102.md`
-  - Owner: Codex Agent (WhatsApp)
+## NOW (Day 2 — after Day 1 merges)
+- [ ] Voice Flow A Slice C: outbound audio buffering + pacing + backlog cap (separate ticket)
+- [ ] Voice Flow A Slice D: barge-in cancel/clear semantics + aux-lane “thinking audio” (separate ticket)
+- [ ] Unified engine router interface (shared across voice/whatsapp/webui)
 
 ## Guardrails
 - No cross-feature imports.
