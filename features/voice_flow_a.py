@@ -1,13 +1,18 @@
 """VOZLIA FILE PURPOSE
-Purpose: Twilio Media Streams ↔ OpenAI Realtime bridge for Voice Flow A.
-Hot path: yes (WS loops; avoid per-frame logging / heavy parsing).
+Purpose: Twilio Media Streams handler for Voice Flow A (Slice A–D scaffolding), including a
+  first-class “waiting/thinking audio” lane to avoid future regressions with barge-in/buffers.
+Hot path: yes (websocket loop must stay lightweight; no DB/LLM; bounded work per frame).
 Public interfaces:
-  - WebSocket: /twilio/stream
-  - Helpers: parse_twilio_start, parse_twilio_media, is_twilio_stop
-Reads/Writes: reads env vars only (no DB).
-Feature flags: VOZ_FEATURE_VOICE_FLOW_A (default OFF), VOZLIA_DEBUG.
-Failure mode: if OpenAI connection fails, close Twilio WS cleanly (no busy loops).
-Last touched: 2026-02-17 (port OpenAI Realtime bridge from legacy flow_a.py).
+  - WS /twilio/stream
+  - parse_twilio_start(d), parse_twilio_media(d), is_twilio_stop(d)
+  - WaitingAudioController (pure, deterministic; tested offline)
+Reads/Writes: none (in-memory only).
+Feature flags:
+  - VOZ_FEATURE_VOICE_FLOW_A (default OFF)
+  - VOZLIA_DEBUG (gates diagnostic logs)
+  - VOICE_WAIT_CHIME_ENABLED (default OFF; enables aux-lane “thinking” chime)
+Failure mode: malformed events ignored; sender loop stops on disconnect; aux lane is cancelable.
+Last touched: 2026-02-17 (add aux audio lane + deterministic waiting-audio controller)
 """
 
 from __future__ import annotations
@@ -16,13 +21,15 @@ import asyncio
 import base64
 import binascii
 import json
+import math
 import os
 import time
+from collections import deque
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
-import websockets
 from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
@@ -32,34 +39,27 @@ from core.logging import logger
 
 router = APIRouter()
 
-# ---- Env (legacy-compatible names) ----
-BYTES_PER_FRAME = int(os.getenv("BYTES_PER_FRAME", "160"))  # 20ms @ 8kHz μ-law
-FRAME_INTERVAL = float(os.getenv("FRAME_INTERVAL", "0.02"))
-PREBUFFER_BYTES = int(os.getenv("PREBUFFER_BYTES", "8000"))
-MAX_TWILIO_BACKLOG_SECONDS = float(os.getenv("MAX_TWILIO_BACKLOG_SECONDS", "1.0"))
+# --- Env-configurable knobs (safe defaults) ----------------------------------
 
-OPENAI_REALTIME_MODEL = os.getenv("OPENAI_REALTIME_MODEL", "gpt-4o-mini-realtime-preview-2024-12-17")
-OPENAI_REALTIME_URL = os.getenv(
-    "OPENAI_REALTIME_URL", f"wss://api.openai.com/v1/realtime?model={OPENAI_REALTIME_MODEL}"
-)
-OPENAI_REALTIME_VOICE = os.getenv("OPENAI_REALTIME_VOICE", os.getenv("VOICE_NAME", "coral"))
-REALTIME_SYSTEM_PROMPT = os.getenv(
-    "REALTIME_SYSTEM_PROMPT",
-    "You are Vozlia, a helpful real-time voice assistant. Always introduce yourself. "
-    "Be concise, friendly, and natural.",
-)
-REALTIME_TRANSCRIBE_MODEL = os.getenv("REALTIME_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe")
+# Start “thinking audio” only after the wait has lasted at least this long.
+VOICE_WAIT_SOUND_TRIGGER_MS = int(os.getenv("VOICE_WAIT_SOUND_TRIGGER_MS", "800") or 800)
 
-REALTIME_VAD_THRESHOLD = float(os.getenv("REALTIME_VAD_THRESHOLD", "0.5"))
-REALTIME_VAD_SILENCE_MS = int(os.getenv("REALTIME_VAD_SILENCE_MS", "600"))
-REALTIME_VAD_PREFIX_MS = int(os.getenv("REALTIME_VAD_PREFIX_MS", "200"))
+# Master kill-switch for aux-lane chime audio (default OFF to avoid regressions).
+VOICE_WAIT_CHIME_ENABLED = env_flag("VOICE_WAIT_CHIME_ENABLED", "0")
 
-REALTIME_CREATE_RESPONSE = env_flag("REALTIME_CREATE_RESPONSE", "1")
-OPENAI_INTERRUPT_RESPONSE = env_flag("OPENAI_INTERRUPT_RESPONSE", "1")
-REALTIME_SEND_INITIAL_GREETING = env_flag("REALTIME_SEND_INITIAL_GREETING", "1")
+# Periodic chime loop settings (Option A): short beep repeated every ~1.2–1.8s.
+VOICE_WAIT_CHIME_PERIOD_MS = int(os.getenv("VOICE_WAIT_CHIME_PERIOD_MS", "1500") or 1500)
+VOICE_WAIT_CHIME_BEEP_MS = int(os.getenv("VOICE_WAIT_CHIME_BEEP_MS", "120") or 120)
+
+# 8kHz mu-law: Twilio Media Streams uses 20ms frames => 160 bytes.
+_TWILIO_SAMPLE_RATE_HZ = 8000
+_TWILIO_FRAME_MS = 20
+_TWILIO_FRAME_BYTES = int(_TWILIO_SAMPLE_RATE_HZ * (_TWILIO_FRAME_MS / 1000.0))
 
 _TENANT_ID_ALLOWLIST = ("tenant_id",)
 
+
+# --- Twilio event parsing helpers (pure) -------------------------------------
 
 def _clean_str(v: Any) -> str | None:
     if not isinstance(v, str):
@@ -83,13 +83,15 @@ def parse_twilio_start(d: dict) -> dict:
     return {
         "streamSid": _clean_str(start_obj.get("streamSid")) or _clean_str(d.get("streamSid")),
         "callSid": _clean_str(start_obj.get("callSid")) or _clean_str(d.get("callSid")),
-        "from_number": _clean_str(start_obj.get("from")) or _clean_str(custom_obj.get("from_number")),
+        "from_number": (
+            _clean_str(start_obj.get("from"))
+            or _clean_str(custom_obj.get("from_number"))
+        ),
         "tenant_id": tenant_id,
     }
 
 
 def parse_twilio_media(d: dict) -> bytes | None:
-    # NOTE: expensive (base64 decode). Kept for tests and offline validation.
     media = d.get("media")
     if not isinstance(media, dict):
         return None
@@ -102,29 +104,214 @@ def parse_twilio_media(d: dict) -> bytes | None:
         return None
 
 
-def parse_twilio_media_payload_b64(d: dict) -> str | None:
-    # Fast path: return base64 string without decoding.
-    media = d.get("media")
-    if not isinstance(media, dict):
-        return None
-    payload = media.get("payload")
-    if not isinstance(payload, str):
-        return None
-    if len(payload) > 50_000:
-        return None
-    return payload
-
-
 def is_twilio_stop(d: dict) -> bool:
     return d.get("event") == "stop"
 
 
-def _openai_headers() -> list[tuple[str, str]]:
-    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is not set")
-    return [("Authorization", f"Bearer {api_key}"), ("OpenAI-Beta", "realtime=v1")]
+# --- Deterministic waiting-audio controller (no network / DB) ----------------
 
+LaneName = Literal["main", "aux"]
+
+
+@dataclass
+class OutgoingAudioBuffers:
+    """Two independent audio lanes.
+
+    - main: assistant speech (OpenAI Realtime audio deltas in future)
+    - aux:  “thinking audio” comfort tone (cancelable, does not clear main)
+    """
+
+    main: deque[bytes] = field(default_factory=deque)
+    aux: deque[bytes] = field(default_factory=deque)
+
+
+def _clear_deque(dq: deque[bytes]) -> None:
+    dq.clear()
+
+
+def pick_next_outgoing_frame(
+    buffers: OutgoingAudioBuffers, *, thinking_audio_active: bool
+) -> tuple[LaneName, bytes] | None:
+    """Single, testable routing rule:
+    - main speech always wins
+    - aux is only used when thinking_audio_active and main is empty
+    """
+    if buffers.main:
+        return ("main", buffers.main.popleft())
+    if thinking_audio_active and buffers.aux:
+        return ("aux", buffers.aux.popleft())
+    return None
+
+
+def _linear16_to_mulaw(sample: int) -> int:
+    """Convert signed 16-bit PCM sample -> G.711 mu-law byte.
+
+    This is a tiny deterministic encoder to generate the comfort tone once at import time.
+    """
+    # Standard constants.
+    bias = 0x84
+    clip = 32635
+
+    sign = 0x80 if sample < 0 else 0
+    if sample < 0:
+        sample = -sample
+    if sample > clip:
+        sample = clip
+
+    sample += bias
+
+    exponent = 7
+    mask = 0x4000
+    while exponent > 0 and (sample & mask) == 0:
+        exponent -= 1
+        mask >>= 1
+
+    mantissa = (sample >> (exponent + 3)) & 0x0F
+    ulaw = ~(sign | (exponent << 4) | mantissa) & 0xFF
+    return ulaw
+
+
+def _mulaw_silence_byte() -> int:
+    # In G.711 mu-law, 0xFF is commonly used for silence (zero amplitude).
+    return 0xFF
+
+
+def _generate_mulaw_beep_frames(
+    *,
+    hz: int = 440,
+    beep_ms: int = VOICE_WAIT_CHIME_BEEP_MS,
+    sample_rate_hz: int = _TWILIO_SAMPLE_RATE_HZ,
+    frame_bytes: int = _TWILIO_FRAME_BYTES,
+    amplitude: int = 4500,
+) -> list[bytes]:
+    """Generate a short, low-amplitude mu-law beep as a list of Twilio-sized frames.
+
+    Precomputed once at import time to keep hot path clean.
+    """
+    n = max(1, int(sample_rate_hz * (beep_ms / 1000.0)))
+    out = bytearray()
+    for i in range(n):
+        # Low amplitude sine to avoid intrusion.
+        s = int(amplitude * math.sin(2.0 * math.pi * hz * (i / sample_rate_hz)))
+        out.append(_linear16_to_mulaw(s))
+
+    # Pad to a multiple of frame size so every frame is exactly 20ms for Twilio.
+    pad = (-len(out)) % frame_bytes
+    if pad:
+        out.extend([_mulaw_silence_byte()] * pad)
+
+    frames: list[bytes] = []
+    for off in range(0, len(out), frame_bytes):
+        frames.append(bytes(out[off : off + frame_bytes]))
+    return frames
+
+
+_DEFAULT_CHIME_FRAMES: list[bytes] = _generate_mulaw_beep_frames()
+
+
+@dataclass(frozen=True)
+class WaitingAudioConfig:
+    enabled: bool
+    trigger_ms: int
+    period_ms: int
+    chime_frames: tuple[bytes, ...]
+
+
+@dataclass
+class WaitingAudioController:
+    """Pure state machine for “waiting/thinking audio”.
+
+    Core idea: treat thinking audio as a first-class state and *separate lane*.
+
+    Behavior:
+    - wait_start() marks the start of a tool/skill wait.
+    - After trigger_ms of waiting with no suppression, thinking_audio_active becomes True.
+    - While active, update() enqueues a short chime into buffers.aux every period_ms.
+    - on_user_speech_started() immediately stops chime and clears aux (does NOT clear main).
+    - wait_end() stops chime and resets suppression.
+    """
+
+    cfg: WaitingAudioConfig
+    waiting_active: bool = False
+    waiting_started_ms: int | None = None
+    thinking_audio_active: bool = False
+    # If caller speaks while we are waiting, we suppress thinking audio until wait_end().
+    suppressed_until_end: bool = False
+    _next_chime_due_ms: int = 0
+
+    def wait_start(self, *, now_ms: int) -> None:
+        self.waiting_active = True
+        self.waiting_started_ms = now_ms
+        self.suppressed_until_end = False
+        self._next_chime_due_ms = 0
+        self.thinking_audio_active = False
+
+    def wait_end(self, *, buffers: OutgoingAudioBuffers | None = None) -> None:
+        self.waiting_active = False
+        self.waiting_started_ms = None
+        self.suppressed_until_end = False
+        self._next_chime_due_ms = 0
+        self.thinking_audio_active = False
+        if buffers is not None:
+            _clear_deque(buffers.aux)
+
+    def on_user_speech_started(self, *, buffers: OutgoingAudioBuffers | None = None) -> None:
+        # Stop the aux lane instantly; do NOT clear main.
+        self.thinking_audio_active = False
+        self.suppressed_until_end = True
+        self._next_chime_due_ms = 0
+        if buffers is not None:
+            _clear_deque(buffers.aux)
+
+    def _should_think(self, *, now_ms: int) -> bool:
+        if not self.cfg.enabled:
+            return False
+        if not self.waiting_active or self.suppressed_until_end:
+            return False
+        if self.waiting_started_ms is None:
+            return False
+        return (now_ms - self.waiting_started_ms) >= self.cfg.trigger_ms
+
+    def update(self, *, now_ms: int, buffers: OutgoingAudioBuffers) -> None:
+        """Advance state and enqueue aux chime frames if due.
+
+        Designed to be safe to call frequently (e.g., from sender loop).
+        """
+        want_thinking = self._should_think(now_ms=now_ms)
+        if not want_thinking:
+            if self.thinking_audio_active:
+                # We were thinking and now shouldn't be: stop + clear aux.
+                self.thinking_audio_active = False
+                _clear_deque(buffers.aux)
+            return
+
+        # We are in THINKING.
+        if not self.thinking_audio_active:
+            self.thinking_audio_active = True
+            self._next_chime_due_ms = now_ms
+
+        # Only enqueue a new chime when due and the aux buffer is empty-ish
+        # (keeps backlog bounded and cancelable).
+        if now_ms >= self._next_chime_due_ms and len(buffers.aux) == 0:
+            buffers.aux.extend(self.cfg.chime_frames)
+            self._next_chime_due_ms = now_ms + self.cfg.period_ms
+
+
+def _build_waiting_audio_config_from_env() -> WaitingAudioConfig:
+    trigger_ms = VOICE_WAIT_SOUND_TRIGGER_MS
+    period_ms = VOICE_WAIT_CHIME_PERIOD_MS
+    # Clamp to avoid silly values that could flood the loop.
+    trigger_ms = max(0, min(trigger_ms, 10_000))
+    period_ms = max(200, min(period_ms, 10_000))
+    return WaitingAudioConfig(
+        enabled=VOICE_WAIT_CHIME_ENABLED,
+        trigger_ms=trigger_ms,
+        period_ms=period_ms,
+        chime_frames=tuple(_DEFAULT_CHIME_FRAMES),
+    )
+
+
+# --- Helpers for tests (env isolation) ---------------------------------------
 
 @contextmanager
 def _temp_env(values: dict[str, str | None]) -> Iterator[None]:
@@ -145,229 +332,110 @@ def _temp_env(values: dict[str, str | None]) -> Iterator[None]:
                 os.environ[k] = v
 
 
+def _now_ms() -> int:
+    return int(time.monotonic() * 1000)
+
+
+async def _ws_sender_loop(websocket: WebSocket, *, stream_sid_ref: dict[str, str | None],
+                          buffers: OutgoingAudioBuffers, wait_ctl: WaitingAudioController,
+                          stop: asyncio.Event) -> None:
+    """Outbound loop: prefer main lane; otherwise use aux lane when thinking.
+
+    IMPORTANT: This is intentionally minimal. Pacing/backlog caps for main lane are handled
+    in Slice C. For now we only pace aux frames (20ms sleep) to avoid bursty beeps.
+    """
+    while websocket.client_state == WebSocketState.CONNECTED and not stop.is_set():
+        stream_sid = stream_sid_ref.get("streamSid")
+        if not stream_sid:
+            await asyncio.sleep(0.01)
+            continue
+
+        now_ms = _now_ms()
+        wait_ctl.update(now_ms=now_ms, buffers=buffers)
+
+        picked = pick_next_outgoing_frame(
+            buffers, thinking_audio_active=wait_ctl.thinking_audio_active
+        )
+        if picked is None:
+            await asyncio.sleep(0.02)
+            continue
+
+        lane, frame = picked
+        payload = base64.b64encode(frame).decode("ascii")
+        msg = {"event": "media", "streamSid": stream_sid, "media": {"payload": payload}}
+        try:
+            await websocket.send_text(json.dumps(msg))
+        except Exception:
+            break
+
+        if lane == "aux":
+            await asyncio.sleep(_TWILIO_FRAME_MS / 1000.0)
+
+
 @router.websocket("/twilio/stream")
 async def twilio_stream(websocket: WebSocket) -> None:
-    """Flow A bridge: Twilio WS ↔ OpenAI Realtime WS."""
     await websocket.accept()
 
-    # NOTE: FastAPI WebSocket sends are not guaranteed to be concurrency-safe; guard with a lock.
-    twilio_send_lock = asyncio.Lock()
-    openai_send_lock = asyncio.Lock()
-
-    stream_sid: str | None = None
+    stream_sid_ref: dict[str, str | None] = {"streamSid": None}
     call_sid: str | None = None
+    from_number: str | None = None
     tenant_id: str | None = None
 
-    openai_ws: websockets.WebSocketClientProtocol | None = None
-    audio_buffer = bytearray()
-    stop_event = asyncio.Event()
+    buffers = OutgoingAudioBuffers()
+    wait_ctl = WaitingAudioController(cfg=_build_waiting_audio_config_from_env())
 
-    sender_task: asyncio.Task[None] | None = None
-    openai_task: asyncio.Task[None] | None = None
+    stop = asyncio.Event()
+    sender_task = asyncio.create_task(
+        _ws_sender_loop(
+            websocket,
+            stream_sid_ref=stream_sid_ref,
+            buffers=buffers,
+            wait_ctl=wait_ctl,
+            stop=stop,
+        )
+    )
 
-    active_response_id: str | None = None
-    assistant_last_audio_time = 0.0
-
-    async def twilio_send(obj: dict[str, object]) -> None:
-        async with twilio_send_lock:
-            await websocket.send_text(json.dumps(obj))
-
-    async def twilio_clear() -> None:
-        if not stream_sid:
+    def notify_wait_start(reason: str) -> None:
+        # NOTE: the controller contains the real logic; this wrapper is for breadcrumbs only.
+        if wait_ctl.waiting_active:
             return
-        try:
-            await twilio_send({"event": "clear", "streamSid": stream_sid})
-        except Exception:
-            return
-
-    def assistant_speaking() -> bool:
-        if audio_buffer:
-            return True
-        return bool(assistant_last_audio_time and (time.monotonic() - assistant_last_audio_time) < 0.5)
-
-    async def create_realtime_session() -> websockets.WebSocketClientProtocol:
+        wait_ctl.wait_start(now_ms=_now_ms())
         if is_debug():
             logger.info(
-                "FLOW_A openai_connect url=%s tenant=%s callSid=%s", OPENAI_REALTIME_URL, tenant_id, call_sid
+                "VOICE_WAIT_START reason=%s streamSid=%s callSid=%s",
+                reason,
+                stream_sid_ref.get("streamSid"),
+                call_sid,
             )
 
-        ws = await websockets.connect(
-            OPENAI_REALTIME_URL,
-            extra_headers=_openai_headers(),
-            ping_interval=None,
-            ping_timeout=None,
-            max_size=None,
-        )
-
-        prompt = REALTIME_SYSTEM_PROMPT
-        if tenant_id:
-            prompt = f"{prompt}\n\nTenant context: tenant_id={tenant_id}."
-
-        session_update = {
-            "type": "session.update",
-            "session": {
-                "instructions": prompt,
-                "voice": OPENAI_REALTIME_VOICE,
-                "modalities": ["text", "audio"],
-                "input_audio_format": "g711_ulaw",
-                "output_audio_format": "g711_ulaw",
-                "turn_detection": {
-                    "type": "server_vad",
-                    "threshold": REALTIME_VAD_THRESHOLD,
-                    "silence_duration_ms": REALTIME_VAD_SILENCE_MS,
-                    "prefix_padding_ms": REALTIME_VAD_PREFIX_MS,
-                    "create_response": REALTIME_CREATE_RESPONSE,
-                    "interrupt_response": OPENAI_INTERRUPT_RESPONSE,
-                },
-                "input_audio_transcription": {"model": REALTIME_TRANSCRIBE_MODEL},
-            },
-        }
-        await ws.send(json.dumps(session_update))
-
-        if REALTIME_SEND_INITIAL_GREETING:
-            await ws.send(json.dumps({"type": "response.create"}))
-
-        return ws
-
-    async def openai_send(obj: dict[str, object]) -> None:
-        assert openai_ws is not None
-        async with openai_send_lock:
-            await openai_ws.send(json.dumps(obj))
-
-    async def twilio_audio_sender() -> None:
-        nonlocal assistant_last_audio_time
-        next_send = time.monotonic()
-        frames_sent = 0
-        play_start: float | None = None
-        prebuffer_active = True
-
-        while not stop_event.is_set():
-            if not stream_sid:
-                await asyncio.sleep(0.01)
-                continue
-
-            now = time.monotonic()
-            if now < next_send:
-                await asyncio.sleep(min(0.01, next_send - now))
-                continue
-
-            if play_start is None:
-                play_start = now
-                frames_sent = 0
-                prebuffer_active = True
-
-            # backlog > 0 means we've sent more audio than wall clock; cap it.
-            call_elapsed = now - play_start
-            sent_dur = frames_sent * FRAME_INTERVAL
-            backlog = sent_dur - call_elapsed
-            if backlog > MAX_TWILIO_BACKLOG_SECONDS:
-                await asyncio.sleep(0.01)
-                next_send = time.monotonic()
-                continue
-
-            if prebuffer_active and len(audio_buffer) < PREBUFFER_BYTES:
-                await asyncio.sleep(0.005)
-                next_send = time.monotonic() + FRAME_INTERVAL
-                continue
-            prebuffer_active = False
-
-            if len(audio_buffer) >= BYTES_PER_FRAME:
-                chunk = bytes(audio_buffer[:BYTES_PER_FRAME])
-                del audio_buffer[:BYTES_PER_FRAME]
-                payload = base64.b64encode(chunk).decode("ascii")
-                msg = {"event": "media", "streamSid": stream_sid, "media": {"payload": payload}}
-                try:
-                    await twilio_send(msg)
-                except Exception:
-                    stop_event.set()
-                    return
-                assistant_last_audio_time = time.monotonic()
-                frames_sent += 1
-            else:
-                await asyncio.sleep(0.005)
-
-            next_send = time.monotonic() + FRAME_INTERVAL
-
-    async def openai_event_loop() -> None:
-        nonlocal active_response_id
-        assert openai_ws is not None
-        try:
-            async for raw in openai_ws:
-                if stop_event.is_set():
-                    break
-                try:
-                    event = json.loads(raw)
-                except Exception:
-                    continue
-                etype = event.get("type")
-
-                if etype == "response.created":
-                    rid = (event.get("response") or {}).get("id")
-                    if isinstance(rid, str) and rid:
-                        active_response_id = rid
-                    continue
-
-                if etype in ("response.completed", "response.failed", "response.canceled"):
-                    rid = (event.get("response") or {}).get("id")
-                    if active_response_id and rid == active_response_id:
-                        active_response_id = None
-                        # Pad to frame boundary to avoid sender deadlock on trailing remainder.
-                        rem = len(audio_buffer) % BYTES_PER_FRAME
-                        if rem:
-                            audio_buffer.extend(b"\xff" * (BYTES_PER_FRAME - rem))
-                    continue
-
-                if etype == "response.audio.delta":
-                    rid = event.get("response_id")
-                    if active_response_id and rid != active_response_id:
-                        continue
-                    delta_b64 = event.get("delta")
-                    if not isinstance(delta_b64, str) or not delta_b64:
-                        continue
-                    try:
-                        audio_buffer.extend(base64.b64decode(delta_b64))
-                    except Exception:
-                        continue
-                    continue
-
-                if etype == "input_audio_buffer.speech_started":
-                    if assistant_speaking():
-                        # Local mute + clear Twilio queued audio.
-                        audio_buffer.clear()
-                        await twilio_clear()
-
-                        # Best-effort cancel OpenAI response (cancel races are expected).
-                        if active_response_id:
-                            rid = active_response_id
-                            active_response_id = None
-                            try:
-                                await openai_send({"type": "response.cancel", "response_id": rid})
-                            except Exception:
-                                pass
-                    continue
-
-                if etype == "error":
-                    if is_debug():
-                        logger.info("FLOW_A openai_error event=%s", event)
-                    else:
-                        err = event.get("error", {})
-                        code = err.get("code") if isinstance(err, dict) else None
-                        if code not in ("response_cancel_not_active",):
-                            logger.warning("FLOW_A openai_error code=%s", code)
-                    continue
-
-        except Exception:
-            if is_debug():
-                logger.exception("FLOW_A openai_loop_exception")
-        finally:
-            stop_event.set()
+    def notify_wait_end() -> None:
+        if not wait_ctl.waiting_active:
+            return
+        started_ms = wait_ctl.waiting_started_ms or _now_ms()
+        elapsed = _now_ms() - started_ms
+        wait_ctl.wait_end(buffers=buffers)
+        if is_debug():
+            logger.info(
+                "VOICE_WAIT_END elapsed_ms=%s streamSid=%s callSid=%s",
+                elapsed,
+                stream_sid_ref.get("streamSid"),
+                call_sid,
+            )
 
     try:
-        async for raw in websocket.iter_text():
+        while True:
+            try:
+                raw = await websocket.receive_text()
+            except WebSocketDisconnect:
+                break
+
             try:
                 data = json.loads(raw)
-            except Exception:
+            except json.JSONDecodeError:
+                if is_debug():
+                    logger.info("TWILIO_WS_BAD_JSON")
                 continue
+
             if not isinstance(data, dict):
                 continue
 
@@ -379,91 +447,89 @@ async def twilio_stream(websocket: WebSocket) -> None:
 
             if event == "start":
                 start_info = parse_twilio_start(data)
-                stream_sid = start_info["streamSid"]
+                stream_sid_ref["streamSid"] = start_info["streamSid"]
                 call_sid = start_info["callSid"]
+                from_number = start_info["from_number"]
                 tenant_id = start_info["tenant_id"]
-
                 if is_debug():
                     logger.info(
                         "TWILIO_WS_START streamSid=%s callSid=%s from=%s tenant=%s",
-                        stream_sid,
+                        stream_sid_ref["streamSid"],
                         call_sid,
-                        start_info["from_number"],
+                        from_number,
                         tenant_id,
                     )
-
-                if openai_ws is None:
-                    try:
-                        openai_ws = await create_realtime_session()
-                    except Exception as e:
-                        logger.warning("FLOW_A openai_session_failed err=%s", type(e).__name__)
-                        break
-
-                    sender_task = asyncio.create_task(twilio_audio_sender())
-                    openai_task = asyncio.create_task(openai_event_loop())
                 continue
 
             if event == "media":
-                if openai_ws is None:
+                media_bytes = parse_twilio_media(data)
+                if media_bytes is None:
+                    if is_debug():
+                        logger.info(
+                            "TWILIO_WS_MEDIA_INVALID streamSid=%s",
+                            stream_sid_ref["streamSid"],
+                        )
                     continue
-                payload_b64 = parse_twilio_media_payload_b64(data)
-                if payload_b64 is None:
-                    continue
-                try:
-                    await openai_send({"type": "input_audio_buffer.append", "audio": payload_b64})
-                except Exception:
-                    stop_event.set()
-                    break
+
+                # Flow A audio ingestion will be implemented in Slice C/0201
+                # (OpenAI Realtime bridge).
+                # For now: discard bytes deterministically.
+                _ = media_bytes
+
+                # Example integration point: once routing/skills exist, call notify_wait_start()
+                # when a tool begins and notify_wait_end() when it completes.
                 continue
 
             if is_twilio_stop(data):
                 if is_debug():
-                    logger.info("TWILIO_WS_STOP streamSid=%s callSid=%s", stream_sid, call_sid)
-                stop_event.set()
+                    logger.info(
+                        "TWILIO_WS_STOP streamSid=%s callSid=%s",
+                        stream_sid_ref["streamSid"],
+                        call_sid,
+                    )
+                notify_wait_end()
                 break
 
-    except WebSocketDisconnect:
-        stop_event.set()
     finally:
-        stop_event.set()
-
-        for t in (sender_task, openai_task):
-            try:
-                if t is not None:
-                    t.cancel()
-            except Exception:
-                pass
-
+        notify_wait_end()
+        stop.set()
         try:
-            if openai_ws is not None:
-                await openai_ws.close()
+            await sender_task
         except Exception:
             pass
 
         if websocket.client_state == WebSocketState.CONNECTED:
-            try:
-                await websocket.close()
-            except Exception:
-                pass
+            await websocket.close()
 
+        _ = from_number
         _ = tenant_id
-        _ = call_sid
+        _ = notify_wait_start
 
+
+# --- Local (deterministic) checks used by selftests() -------------------------
 
 def _has_ws_route(app: FastAPI, path: str) -> bool:
     return any(getattr(route, "path", None) == path for route in app.routes)
 
 
+# --- Feature contract hooks --------------------------------------------------
+
 def selftests() -> dict:
+    # Parsers
     start_evt = {
         "event": "start",
         "start": {
             "streamSid": "MZ123",
             "callSid": "CA123",
-            "customParameters": {"tenant_id": " tenant-a ", "tenant": "blocked", "from_number": " +15551234567 "},
+            "customParameters": {
+                "tenant_id": " tenant-a ",
+                "tenant": "blocked",
+                "from_number": " +15551234567 ",
+            },
         },
     }
-    if parse_twilio_start(start_evt) != {
+    start_parsed = parse_twilio_start(start_evt)
+    if start_parsed != {
         "streamSid": "MZ123",
         "callSid": "CA123",
         "from_number": "+15551234567",
@@ -471,20 +537,42 @@ def selftests() -> dict:
     }:
         return {"ok": False, "message": "parse_twilio_start failed"}
 
-    if parse_twilio_start({"event": "start", "start": {"customParameters": {"tenant": "x"}}})["tenant_id"] is not None:
+    if parse_twilio_start({"event": "start", "start": {"customParameters": {"tenant": "x"}}})[
+        "tenant_id"
+    ] is not None:
         return {"ok": False, "message": "tenant_id allowlist failed"}
 
     if parse_twilio_media({"event": "media", "media": {"payload": "aGVsbG8="}}) != b"hello":
         return {"ok": False, "message": "parse_twilio_media valid payload failed"}
+
     if parse_twilio_media({"event": "media", "media": {"payload": "*"}}) is not None:
         return {"ok": False, "message": "parse_twilio_media malformed payload failed"}
-
-    if parse_twilio_media_payload_b64({"event": "media", "media": {"payload": "aGVsbG8="}}) != "aGVsbG8=":
-        return {"ok": False, "message": "parse_twilio_media_payload_b64 failed"}
 
     if not is_twilio_stop({"event": "stop"}) or is_twilio_stop({"event": "media"}):
         return {"ok": False, "message": "is_twilio_stop failed"}
 
+    # Waiting-audio controller (pure, deterministic)
+    buffers = OutgoingAudioBuffers()
+    cfg = WaitingAudioConfig(
+        enabled=True,
+        trigger_ms=800,
+        period_ms=1500,
+        chime_frames=(b"a" * _TWILIO_FRAME_BYTES, b"b" * _TWILIO_FRAME_BYTES),
+    )
+    ctl = WaitingAudioController(cfg=cfg)
+    ctl.wait_start(now_ms=0)
+    ctl.update(now_ms=799, buffers=buffers)
+    if ctl.thinking_audio_active or buffers.aux:
+        return {"ok": False, "message": "waiting audio started too early"}
+    ctl.update(now_ms=800, buffers=buffers)
+    if not ctl.thinking_audio_active or len(buffers.aux) != 2:
+        return {"ok": False, "message": "waiting audio did not enqueue chime on trigger"}
+
+    ctl.on_user_speech_started(buffers=buffers)
+    if ctl.thinking_audio_active or buffers.aux:
+        return {"ok": False, "message": "speech_started did not stop/clear aux"}
+
+    # Route mounting (flag gating)
     env_reset = {
         "VOZ_FEATURE_SAMPLE": "0",
         "VOZ_FEATURE_ADMIN_QUALITY": "0",
@@ -512,23 +600,30 @@ def security_checks() -> dict:
     if raw is None and enabled:
         return {"ok": False, "message": "VOZ_FEATURE_VOICE_FLOW_A must default OFF"}
 
-    tenant_ok = parse_twilio_start({"event": "start", "start": {"customParameters": {"tenant_id": " tenant-a "}}})[
-        "tenant_id"
-    ]
+    tenant_ok = parse_twilio_start(
+        {
+            "event": "start",
+            "start": {"customParameters": {"tenant_id": " tenant-a ", "tenant": "wrong"}},
+        }
+    )["tenant_id"]
     if tenant_ok != "tenant-a":
         return {"ok": False, "message": "tenant_id strip/allowlist failed"}
 
-    tenant_blocked = parse_twilio_start({"event": "start", "start": {"customParameters": {"tenant": "wrong"}}})[
-        "tenant_id"
-    ]
+    tenant_blocked = parse_twilio_start(
+        {"event": "start", "start": {"customParameters": {"tenant": "wrong"}}}
+    )["tenant_id"]
     if tenant_blocked is not None:
         return {"ok": False, "message": "tenant_id must come from allowlist only"}
+
+    # Aux chime must default OFF unless explicitly enabled.
+    if os.getenv("VOICE_WAIT_CHIME_ENABLED") is None and VOICE_WAIT_CHIME_ENABLED:
+        return {"ok": False, "message": "VOICE_WAIT_CHIME_ENABLED must default OFF"}
 
     return {"ok": True, "message": "voice_flow_a security checks ok"}
 
 
 def load_profile() -> dict:
-    return {"hint": "twilio-openai-bridge", "p50_ms": 10, "p95_ms": 50}
+    return {"hint": "ws-parse", "p50_ms": 10, "p95_ms": 50}
 
 
 FEATURE = {
