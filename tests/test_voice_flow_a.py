@@ -1,7 +1,15 @@
 from __future__ import annotations
 
 from core.app import create_app
-from features.voice_flow_a import is_twilio_stop, parse_twilio_media, parse_twilio_start
+from features.voice_flow_a import (
+    OutgoingAudioBuffers,
+    WaitingAudioConfig,
+    WaitingAudioController,
+    is_twilio_stop,
+    parse_twilio_media,
+    parse_twilio_start,
+    pick_next_outgoing_frame,
+)
 
 
 def _has_route(app, path: str) -> bool:
@@ -53,3 +61,65 @@ def test_route_mounting_respects_voice_feature_flag(monkeypatch) -> None:
     monkeypatch.setenv("VOZ_FEATURE_VOICE_FLOW_A", "1")
     app_on = create_app()
     assert _has_route(app_on, "/twilio/stream") is True
+
+
+def test_waiting_audio_starts_after_trigger_and_enqueues_chime() -> None:
+    buffers = OutgoingAudioBuffers()
+    cfg = WaitingAudioConfig(
+        enabled=True,
+        trigger_ms=800,
+        period_ms=1500,
+        chime_frames=(b"a" * 160, b"b" * 160),
+    )
+    ctl = WaitingAudioController(cfg=cfg)
+
+    ctl.wait_start(now_ms=0)
+
+    ctl.update(now_ms=799, buffers=buffers)
+    assert ctl.thinking_audio_active is False
+    assert list(buffers.aux) == []
+
+    ctl.update(now_ms=800, buffers=buffers)
+    assert ctl.thinking_audio_active is True
+    assert list(buffers.aux) == [b"a" * 160, b"b" * 160]
+
+
+def test_waiting_audio_stops_on_user_speech_and_suppresses_until_end() -> None:
+    buffers = OutgoingAudioBuffers()
+    cfg = WaitingAudioConfig(
+        enabled=True,
+        trigger_ms=10,
+        period_ms=100,
+        chime_frames=(b"x" * 160,),
+    )
+    ctl = WaitingAudioController(cfg=cfg)
+    ctl.wait_start(now_ms=0)
+
+    ctl.update(now_ms=10, buffers=buffers)
+    assert ctl.thinking_audio_active is True
+    assert len(buffers.aux) == 1
+
+    ctl.on_user_speech_started(buffers=buffers)
+    assert ctl.thinking_audio_active is False
+    assert len(buffers.aux) == 0
+
+    # Even after the trigger, we should remain suppressed until wait_end().
+    ctl.update(now_ms=10_000, buffers=buffers)
+    assert ctl.thinking_audio_active is False
+    assert len(buffers.aux) == 0
+
+    ctl.wait_end(buffers=buffers)
+    assert ctl.waiting_active is False
+    assert ctl.suppressed_until_end is False
+
+
+def test_main_lane_always_wins_over_aux_lane() -> None:
+    buffers = OutgoingAudioBuffers()
+    buffers.main.append(b"MAIN")
+    buffers.aux.append(b"AUX")
+
+    picked1 = pick_next_outgoing_frame(buffers, thinking_audio_active=True)
+    assert picked1 == ("main", b"MAIN")
+
+    picked2 = pick_next_outgoing_frame(buffers, thinking_audio_active=True)
+    assert picked2 == ("aux", b"AUX")
