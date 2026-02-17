@@ -57,6 +57,8 @@ _TWILIO_FRAME_MS = 20
 _TWILIO_FRAME_BYTES = int(_TWILIO_SAMPLE_RATE_HZ * (_TWILIO_FRAME_MS / 1000.0))
 
 _TENANT_ID_ALLOWLIST = ("tenant_id",)
+_TENANT_MODE_ALLOWLIST = ("tenant_mode",)
+_RID_ALLOWLIST = ("rid",)
 
 
 # --- Twilio event parsing helpers (pure) -------------------------------------
@@ -80,6 +82,19 @@ def parse_twilio_start(d: dict) -> dict:
         if tenant_id:
             break
 
+    tenant_mode = None
+    for k in _TENANT_MODE_ALLOWLIST:
+        tenant_mode = _clean_str(custom_obj.get(k))
+        if tenant_mode:
+            break
+
+    rid = None
+    for k in _RID_ALLOWLIST:
+        rid = _clean_str(custom_obj.get(k))
+        if rid:
+            break
+    rid = rid or _clean_str(start_obj.get("callSid")) or _clean_str(d.get("callSid"))
+
     return {
         "streamSid": _clean_str(start_obj.get("streamSid")) or _clean_str(d.get("streamSid")),
         "callSid": _clean_str(start_obj.get("callSid")) or _clean_str(d.get("callSid")),
@@ -88,6 +103,8 @@ def parse_twilio_start(d: dict) -> dict:
             or _clean_str(custom_obj.get("from_number"))
         ),
         "tenant_id": tenant_id,
+        "tenant_mode": tenant_mode,
+        "rid": rid,
     }
 
 
@@ -379,7 +396,11 @@ async def twilio_stream(websocket: WebSocket) -> None:
     stream_sid_ref: dict[str, str | None] = {"streamSid": None}
     call_sid: str | None = None
     from_number: str | None = None
-    tenant_id: str | None = None
+    session_ctx: dict[str, str | None] = {
+        "tenant_id": None,
+        "tenant_mode": None,
+        "rid": None,
+    }
 
     buffers = OutgoingAudioBuffers()
     wait_ctl = WaitingAudioController(cfg=_build_waiting_audio_config_from_env())
@@ -450,14 +471,24 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 stream_sid_ref["streamSid"] = start_info["streamSid"]
                 call_sid = start_info["callSid"]
                 from_number = start_info["from_number"]
-                tenant_id = start_info["tenant_id"]
+                session_ctx["tenant_id"] = start_info["tenant_id"]
+                session_ctx["tenant_mode"] = start_info["tenant_mode"]
+                session_ctx["rid"] = start_info["rid"] or call_sid
                 if is_debug():
                     logger.info(
-                        "TWILIO_WS_START streamSid=%s callSid=%s from=%s tenant=%s",
+                        "TWILIO_WS_START streamSid=%s callSid=%s from=%s tenant=%s tenant_mode=%s rid=%s",
                         stream_sid_ref["streamSid"],
                         call_sid,
                         from_number,
-                        tenant_id,
+                        session_ctx["tenant_id"],
+                        session_ctx["tenant_mode"],
+                        session_ctx["rid"],
+                    )
+                    logger.info(
+                        "VOICE_FLOW_A_START tenant_id=%s tenant_mode=%s rid=%s",
+                        session_ctx["tenant_id"],
+                        session_ctx["tenant_mode"],
+                        session_ctx["rid"],
                     )
                 continue
 
@@ -502,7 +533,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
             await websocket.close()
 
         _ = from_number
-        _ = tenant_id
+        _ = session_ctx
         _ = notify_wait_start
 
 
@@ -534,6 +565,8 @@ def selftests() -> dict:
         "callSid": "CA123",
         "from_number": "+15551234567",
         "tenant_id": "tenant-a",
+        "tenant_mode": None,
+        "rid": "CA123",
     }:
         return {"ok": False, "message": "parse_twilio_start failed"}
 
@@ -541,6 +574,24 @@ def selftests() -> dict:
         "tenant_id"
     ] is not None:
         return {"ok": False, "message": "tenant_id allowlist failed"}
+
+    mode_ok = parse_twilio_start(
+        {
+            "event": "start",
+            "start": {"callSid": "CA_MODE", "customParameters": {"tenant_mode": "dedicated"}},
+        }
+    )["tenant_mode"]
+    if mode_ok != "dedicated":
+        return {"ok": False, "message": "tenant_mode extraction failed"}
+
+    rid_ok = parse_twilio_start(
+        {
+            "event": "start",
+            "start": {"callSid": "CA_RID", "customParameters": {"rid": "RID123"}},
+        }
+    )["rid"]
+    if rid_ok != "RID123":
+        return {"ok": False, "message": "rid extraction failed"}
 
     if parse_twilio_media({"event": "media", "media": {"payload": "aGVsbG8="}}) != b"hello":
         return {"ok": False, "message": "parse_twilio_media valid payload failed"}
@@ -614,6 +665,10 @@ def security_checks() -> dict:
     )["tenant_id"]
     if tenant_blocked is not None:
         return {"ok": False, "message": "tenant_id must come from allowlist only"}
+
+    rid_fallback = parse_twilio_start({"event": "start", "start": {"callSid": "CA_FALLBACK"}})["rid"]
+    if rid_fallback != "CA_FALLBACK":
+        return {"ok": False, "message": "rid fallback to callSid failed"}
 
     # Aux chime must default OFF unless explicitly enabled.
     if os.getenv("VOICE_WAIT_CHIME_ENABLED") is None and VOICE_WAIT_CHIME_ENABLED:

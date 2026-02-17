@@ -47,3 +47,32 @@ Note:
 - `ruff` is not installed in the current execution environment used to generate this patch.
   Repo gates should still run `python -m ruff check .` in CI/dev.
 
+## 2026-02-17 — Shared line access + tenant routing for Twilio inbound
+What was added:
+- New feature module: `features/shared_line_access.py`.
+- New Twilio Voice webhooks:
+`POST /twilio/voice` (entry routing) and `POST /twilio/voice/access-code` (DTMF gather callback).
+- Dedicated line behavior: route by `To` and return `<Connect><Stream ...>` immediately.
+- Shared demo line behavior: prompt for 8-digit access code, validate, bounded retries, then connect stream.
+- Stream custom params now include tenant metadata and request id:
+`tenant_id`, `tenant_mode`, `rid`.
+- Flow A update in `features/voice_flow_a.py`: parse `start.customParameters` for
+`tenant_id`, `tenant_mode`, and `rid`, store in in-memory call/session context, log only under debug.
+
+Flags/env vars:
+- Feature flag (default OFF): `VOZ_FEATURE_SHARED_LINE_ACCESS=0`.
+- Config vars:
+`VOZ_DEDICATED_LINE_MAP_JSON`,
+`VOZ_SHARED_LINE_NUMBER`,
+`VOZ_ACCESS_CODE_MAP_JSON`,
+optional `VOZ_TWILIO_STREAM_URL` (must be `wss://...`, defaults to `wss://example.invalid/twilio/stream`).
+- Debug logging remains gated behind `VOZLIA_DEBUG=1`.
+
+Endpoints:
+- `POST /twilio/voice`
+- `POST /twilio/voice/access-code`
+- Existing WS endpoint remains `WS /twilio/stream`.
+
+Rollback instruction:
+- Set `VOZ_FEATURE_SHARED_LINE_ACCESS=0` to disable routing feature and unmount routes.
+- If Twilio webhook was repointed to `/twilio/voice`, repoint it back to the previous handler.

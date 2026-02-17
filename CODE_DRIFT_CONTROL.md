@@ -42,3 +42,10 @@ If any fail: STOP. Do not merge.
 For every merge, capture ≤5 log lines or outputs proving:
 - feature loader mounted expected features (when enabled)
 - regression runner executed and wrote report
+
+## 7) Touched Registry (append-only)
+## 2026-02-17 — Shared Line Access Routing
+- `features/shared_line_access.py` (new): Twilio entry + gather callback routing by dedicated/shared line, stream parameter injection, deterministic selftests.
+- `features/voice_flow_a.py`: parse and retain `tenant_id`, `tenant_mode`, `rid` from Twilio start custom parameters (debug-gated breadcrumbs).
+- `tests/test_voice_flow_a.py`: parser expectations updated for `tenant_mode` and `rid`.
+- `ops/JOURNAL.md`: journaled feature rollout details, flags, endpoints, rollback.
