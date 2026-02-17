@@ -26,3 +26,21 @@ Automation:
 - `bash scripts/run_gates_record.sh` produces uploadable log + summary + timestamped regression snapshot.
 - `bash scripts/clean_generated.sh` reverts rolling report + clears caches for clean commits.
 - `bash scripts/merge_with_gates.sh <branch> "<merge message>"` merges + runs gates + pushes.
+## 2026-02-17 — Planning session (Flow A chime + monorepo + analytics)
+
+Decisions captured:
+- Locked monorepo: NG will contain `backend/`, `control_plane/`, `webui/` (legacy repos reference-only).
+- Locked Flow A “thinking chime” requirement: deterministic server-injected audio; env-flagged; barge-in safe.
+- Locked DB/analytics requirement: owners can ask arbitrary metrics; LLM proposes **validated query spec**; Python executes safe SQL; persist as dynamic DB skill.
+- Locked continuity: `ops/JOURNAL.md` is the canonical running log; append after each meaningful session.
+
+Next actions (highest priority):
+1) Port OpenAI Realtime bridge from legacy `flow_a.py` → `features/voice_flow_a.py` (hot-path safe).
+2) Add chime injector design behind env flags (default OFF).
+3) Align tenant routing: shared vs dedicated line (build on `features/access_gate.py`).
+4) Core Maintainer: event store + DB scaffold blocks KB/orders/appointments/analytics.
+
+Evidence (repo inspection):
+- `features/voice_flow_a.py` already has waiting hooks + threshold logging (no chime yet).
+- `features/access_gate.py` provides shared-line keyword/code capture.
+
