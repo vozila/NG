@@ -26,3 +26,24 @@ Automation:
 - `bash scripts/run_gates_record.sh` produces uploadable log + summary + timestamped regression snapshot.
 - `bash scripts/clean_generated.sh` reverts rolling report + clears caches for clean commits.
 - `bash scripts/merge_with_gates.sh <branch> "<merge message>"` merges + runs gates + pushes.
+
+## 2026-02-17 — Flow A waiting/thinking audio lane (anti-regression foundation)
+Context:
+- Prior attempts to “inject a thinking chime” into the main outbound assistant buffer caused regressions
+  (cancel/clear semantics, barge-in, buffers fighting each other).
+Decision implemented:
+- Treat thinking audio as a first-class state with a *separate aux audio lane*.
+- Add a deterministic, unit-tested state machine (`WaitingAudioController`) that:
+  - starts THINKING after a trigger threshold
+  - enqueues a periodic chime into the aux buffer only when due
+  - stops immediately on user speech (clears aux only) and suppresses until wait_end()
+Code touched:
+- `features/voice_flow_a.py`: added aux lane + sender loop scaffold + mu-law chime precompute.
+- `tests/test_voice_flow_a.py`: added deterministic waiting-audio and lane-priority tests.
+Quality evidence:
+- compileall ✅
+- pytest ✅ (16 tests)
+Note:
+- `ruff` is not installed in the current execution environment used to generate this patch.
+  Repo gates should still run `python -m ruff check .` in CI/dev.
+

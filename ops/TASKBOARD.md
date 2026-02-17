@@ -6,10 +6,13 @@
 - [x] TASK-0100 — Voice Flow A WS skeleton + waiting-audio hooks (Slice A+B)
 - [x] TASK-0101 — Shared line access gate (out-of-band HTTP FSM)
 - [x] TASK-0102 — WhatsApp inbound adapter stub
+- [x] Flow A waiting/thinking audio lane foundation: `WaitingAudioController` + aux lane + tests
+      (chime default OFF via `VOICE_WAIT_CHIME_ENABLED=0`)
 
-## NOW (Day 2 — after Day 1 merges)
-- [ ] Voice Flow A Slice C: outbound audio buffering + pacing + backlog cap (separate ticket)
-- [ ] Voice Flow A Slice D: barge-in cancel/clear semantics + aux-lane “thinking audio” (separate ticket)
+## NOW (Day 2+)
+- [ ] Flow A Slice C: outbound audio buffering + pacing + backlog cap for main lane (separate ticket)
+- [ ] Flow A Slice D (remaining): barge-in cancel/clear semantics for OpenAI responses + VAD wiring
+- [ ] Flow A Slice E: OpenAI Realtime bridge (flagged; should consume main lane + respect aux lane)
 - [ ] Unified engine router interface (shared across voice/whatsapp/webui)
 
 ## Guardrails
