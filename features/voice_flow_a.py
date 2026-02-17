@@ -1,12 +1,18 @@
 """VOZLIA FILE PURPOSE
-Purpose: Twilio Media Streams skeleton for Voice Flow A (Slice A+B).
-Hot path: yes (websocket loop must stay lightweight and deterministic).
-Feature flags: VOZ_FEATURE_VOICE_FLOW_A, VOZLIA_DEBUG.
-Failure mode: malformed events are ignored; connection remains stable.
+Purpose: Twilio Media Streams ↔ OpenAI Realtime bridge for Voice Flow A.
+Hot path: yes (WS loops; avoid per-frame logging / heavy parsing).
+Public interfaces:
+  - WebSocket: /twilio/stream
+  - Helpers: parse_twilio_start, parse_twilio_media, is_twilio_stop
+Reads/Writes: reads env vars only (no DB).
+Feature flags: VOZ_FEATURE_VOICE_FLOW_A (default OFF), VOZLIA_DEBUG.
+Failure mode: if OpenAI connection fails, close Twilio WS cleanly (no busy loops).
+Last touched: 2026-02-17 (port OpenAI Realtime bridge from legacy flow_a.py).
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import json
@@ -16,6 +22,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
+import websockets
 from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
@@ -25,7 +32,32 @@ from core.logging import logger
 
 router = APIRouter()
 
-VOICE_WAIT_SOUND_TRIGGER_MS = int(os.getenv("VOICE_WAIT_SOUND_TRIGGER_MS", "800") or 800)
+# ---- Env (legacy-compatible names) ----
+BYTES_PER_FRAME = int(os.getenv("BYTES_PER_FRAME", "160"))  # 20ms @ 8kHz μ-law
+FRAME_INTERVAL = float(os.getenv("FRAME_INTERVAL", "0.02"))
+PREBUFFER_BYTES = int(os.getenv("PREBUFFER_BYTES", "8000"))
+MAX_TWILIO_BACKLOG_SECONDS = float(os.getenv("MAX_TWILIO_BACKLOG_SECONDS", "1.0"))
+
+OPENAI_REALTIME_MODEL = os.getenv("OPENAI_REALTIME_MODEL", "gpt-4o-mini-realtime-preview-2024-12-17")
+OPENAI_REALTIME_URL = os.getenv(
+    "OPENAI_REALTIME_URL", f"wss://api.openai.com/v1/realtime?model={OPENAI_REALTIME_MODEL}"
+)
+OPENAI_REALTIME_VOICE = os.getenv("OPENAI_REALTIME_VOICE", os.getenv("VOICE_NAME", "coral"))
+REALTIME_SYSTEM_PROMPT = os.getenv(
+    "REALTIME_SYSTEM_PROMPT",
+    "You are Vozlia, a helpful real-time voice assistant. Always introduce yourself. "
+    "Be concise, friendly, and natural.",
+)
+REALTIME_TRANSCRIBE_MODEL = os.getenv("REALTIME_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe")
+
+REALTIME_VAD_THRESHOLD = float(os.getenv("REALTIME_VAD_THRESHOLD", "0.5"))
+REALTIME_VAD_SILENCE_MS = int(os.getenv("REALTIME_VAD_SILENCE_MS", "600"))
+REALTIME_VAD_PREFIX_MS = int(os.getenv("REALTIME_VAD_PREFIX_MS", "200"))
+
+REALTIME_CREATE_RESPONSE = env_flag("REALTIME_CREATE_RESPONSE", "1")
+OPENAI_INTERRUPT_RESPONSE = env_flag("OPENAI_INTERRUPT_RESPONSE", "1")
+REALTIME_SEND_INITIAL_GREETING = env_flag("REALTIME_SEND_INITIAL_GREETING", "1")
+
 _TENANT_ID_ALLOWLIST = ("tenant_id",)
 
 
@@ -57,6 +89,7 @@ def parse_twilio_start(d: dict) -> dict:
 
 
 def parse_twilio_media(d: dict) -> bytes | None:
+    # NOTE: expensive (base64 decode). Kept for tests and offline validation.
     media = d.get("media")
     if not isinstance(media, dict):
         return None
@@ -69,8 +102,28 @@ def parse_twilio_media(d: dict) -> bytes | None:
         return None
 
 
+def parse_twilio_media_payload_b64(d: dict) -> str | None:
+    # Fast path: return base64 string without decoding.
+    media = d.get("media")
+    if not isinstance(media, dict):
+        return None
+    payload = media.get("payload")
+    if not isinstance(payload, str):
+        return None
+    if len(payload) > 50_000:
+        return None
+    return payload
+
+
 def is_twilio_stop(d: dict) -> bool:
     return d.get("event") == "stop"
+
+
+def _openai_headers() -> list[tuple[str, str]]:
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not set")
+    return [("Authorization", f"Bearer {api_key}"), ("OpenAI-Beta", "realtime=v1")]
 
 
 @contextmanager
@@ -94,58 +147,227 @@ def _temp_env(values: dict[str, str | None]) -> Iterator[None]:
 
 @router.websocket("/twilio/stream")
 async def twilio_stream(websocket: WebSocket) -> None:
+    """Flow A bridge: Twilio WS ↔ OpenAI Realtime WS."""
     await websocket.accept()
+
+    # NOTE: FastAPI WebSocket sends are not guaranteed to be concurrency-safe; guard with a lock.
+    twilio_send_lock = asyncio.Lock()
+    openai_send_lock = asyncio.Lock()
 
     stream_sid: str | None = None
     call_sid: str | None = None
-    from_number: str | None = None
     tenant_id: str | None = None
 
-    waiting_audio_active: bool = False
-    waiting_started_ms: int | None = None
+    openai_ws: websockets.WebSocketClientProtocol | None = None
+    audio_buffer = bytearray()
+    stop_event = asyncio.Event()
 
-    def notify_wait_start(reason: str) -> None:
-        nonlocal waiting_audio_active, waiting_started_ms
-        if waiting_audio_active:
+    sender_task: asyncio.Task[None] | None = None
+    openai_task: asyncio.Task[None] | None = None
+
+    active_response_id: str | None = None
+    assistant_last_audio_time = 0.0
+
+    async def twilio_send(obj: dict[str, object]) -> None:
+        async with twilio_send_lock:
+            await websocket.send_text(json.dumps(obj))
+
+    async def twilio_clear() -> None:
+        if not stream_sid:
             return
-        waiting_audio_active = True
-        waiting_started_ms = int(time.monotonic() * 1000)
+        try:
+            await twilio_send({"event": "clear", "streamSid": stream_sid})
+        except Exception:
+            return
+
+    def assistant_speaking() -> bool:
+        if audio_buffer:
+            return True
+        return bool(assistant_last_audio_time and (time.monotonic() - assistant_last_audio_time) < 0.5)
+
+    async def create_realtime_session() -> websockets.WebSocketClientProtocol:
         if is_debug():
             logger.info(
-                "VOICE_WAIT_START reason=%s streamSid=%s callSid=%s", reason, stream_sid, call_sid
+                "FLOW_A openai_connect url=%s tenant=%s callSid=%s", OPENAI_REALTIME_URL, tenant_id, call_sid
             )
 
-    def notify_wait_end() -> None:
-        nonlocal waiting_audio_active, waiting_started_ms
-        if not waiting_audio_active:
-            return
-        elapsed = (
-            int(time.monotonic() * 1000) - waiting_started_ms if waiting_started_ms is not None else 0
+        ws = await websockets.connect(
+            OPENAI_REALTIME_URL,
+            extra_headers=_openai_headers(),
+            ping_interval=None,
+            ping_timeout=None,
+            max_size=None,
         )
-        if is_debug():
-            logger.info(
-                "VOICE_WAIT_END elapsed_ms=%s streamSid=%s callSid=%s",
-                elapsed,
-                stream_sid,
-                call_sid,
-            )
-        waiting_audio_active = False
-        waiting_started_ms = None
 
-    try:
-        while True:
-            try:
-                raw = await websocket.receive_text()
-            except WebSocketDisconnect:
-                break
+        prompt = REALTIME_SYSTEM_PROMPT
+        if tenant_id:
+            prompt = f"{prompt}\n\nTenant context: tenant_id={tenant_id}."
 
-            try:
-                data = json.loads(raw)
-            except json.JSONDecodeError:
-                if is_debug():
-                    logger.info("TWILIO_WS_BAD_JSON")
+        session_update = {
+            "type": "session.update",
+            "session": {
+                "instructions": prompt,
+                "voice": OPENAI_REALTIME_VOICE,
+                "modalities": ["text", "audio"],
+                "input_audio_format": "g711_ulaw",
+                "output_audio_format": "g711_ulaw",
+                "turn_detection": {
+                    "type": "server_vad",
+                    "threshold": REALTIME_VAD_THRESHOLD,
+                    "silence_duration_ms": REALTIME_VAD_SILENCE_MS,
+                    "prefix_padding_ms": REALTIME_VAD_PREFIX_MS,
+                    "create_response": REALTIME_CREATE_RESPONSE,
+                    "interrupt_response": OPENAI_INTERRUPT_RESPONSE,
+                },
+                "input_audio_transcription": {"model": REALTIME_TRANSCRIBE_MODEL},
+            },
+        }
+        await ws.send(json.dumps(session_update))
+
+        if REALTIME_SEND_INITIAL_GREETING:
+            await ws.send(json.dumps({"type": "response.create"}))
+
+        return ws
+
+    async def openai_send(obj: dict[str, object]) -> None:
+        assert openai_ws is not None
+        async with openai_send_lock:
+            await openai_ws.send(json.dumps(obj))
+
+    async def twilio_audio_sender() -> None:
+        nonlocal assistant_last_audio_time
+        next_send = time.monotonic()
+        frames_sent = 0
+        play_start: float | None = None
+        prebuffer_active = True
+
+        while not stop_event.is_set():
+            if not stream_sid:
+                await asyncio.sleep(0.01)
                 continue
 
+            now = time.monotonic()
+            if now < next_send:
+                await asyncio.sleep(min(0.01, next_send - now))
+                continue
+
+            if play_start is None:
+                play_start = now
+                frames_sent = 0
+                prebuffer_active = True
+
+            # backlog > 0 means we've sent more audio than wall clock; cap it.
+            call_elapsed = now - play_start
+            sent_dur = frames_sent * FRAME_INTERVAL
+            backlog = sent_dur - call_elapsed
+            if backlog > MAX_TWILIO_BACKLOG_SECONDS:
+                await asyncio.sleep(0.01)
+                next_send = time.monotonic()
+                continue
+
+            if prebuffer_active and len(audio_buffer) < PREBUFFER_BYTES:
+                await asyncio.sleep(0.005)
+                next_send = time.monotonic() + FRAME_INTERVAL
+                continue
+            prebuffer_active = False
+
+            if len(audio_buffer) >= BYTES_PER_FRAME:
+                chunk = bytes(audio_buffer[:BYTES_PER_FRAME])
+                del audio_buffer[:BYTES_PER_FRAME]
+                payload = base64.b64encode(chunk).decode("ascii")
+                msg = {"event": "media", "streamSid": stream_sid, "media": {"payload": payload}}
+                try:
+                    await twilio_send(msg)
+                except Exception:
+                    stop_event.set()
+                    return
+                assistant_last_audio_time = time.monotonic()
+                frames_sent += 1
+            else:
+                await asyncio.sleep(0.005)
+
+            next_send = time.monotonic() + FRAME_INTERVAL
+
+    async def openai_event_loop() -> None:
+        nonlocal active_response_id
+        assert openai_ws is not None
+        try:
+            async for raw in openai_ws:
+                if stop_event.is_set():
+                    break
+                try:
+                    event = json.loads(raw)
+                except Exception:
+                    continue
+                etype = event.get("type")
+
+                if etype == "response.created":
+                    rid = (event.get("response") or {}).get("id")
+                    if isinstance(rid, str) and rid:
+                        active_response_id = rid
+                    continue
+
+                if etype in ("response.completed", "response.failed", "response.canceled"):
+                    rid = (event.get("response") or {}).get("id")
+                    if active_response_id and rid == active_response_id:
+                        active_response_id = None
+                        # Pad to frame boundary to avoid sender deadlock on trailing remainder.
+                        rem = len(audio_buffer) % BYTES_PER_FRAME
+                        if rem:
+                            audio_buffer.extend(b"\xff" * (BYTES_PER_FRAME - rem))
+                    continue
+
+                if etype == "response.audio.delta":
+                    rid = event.get("response_id")
+                    if active_response_id and rid != active_response_id:
+                        continue
+                    delta_b64 = event.get("delta")
+                    if not isinstance(delta_b64, str) or not delta_b64:
+                        continue
+                    try:
+                        audio_buffer.extend(base64.b64decode(delta_b64))
+                    except Exception:
+                        continue
+                    continue
+
+                if etype == "input_audio_buffer.speech_started":
+                    if assistant_speaking():
+                        # Local mute + clear Twilio queued audio.
+                        audio_buffer.clear()
+                        await twilio_clear()
+
+                        # Best-effort cancel OpenAI response (cancel races are expected).
+                        if active_response_id:
+                            rid = active_response_id
+                            active_response_id = None
+                            try:
+                                await openai_send({"type": "response.cancel", "response_id": rid})
+                            except Exception:
+                                pass
+                    continue
+
+                if etype == "error":
+                    if is_debug():
+                        logger.info("FLOW_A openai_error event=%s", event)
+                    else:
+                        err = event.get("error", {})
+                        code = err.get("code") if isinstance(err, dict) else None
+                        if code not in ("response_cancel_not_active",):
+                            logger.warning("FLOW_A openai_error code=%s", code)
+                    continue
+
+        except Exception:
+            if is_debug():
+                logger.exception("FLOW_A openai_loop_exception")
+        finally:
+            stop_event.set()
+
+    try:
+        async for raw in websocket.iter_text():
+            try:
+                data = json.loads(raw)
+            except Exception:
+                continue
             if not isinstance(data, dict):
                 continue
 
@@ -159,57 +381,77 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 start_info = parse_twilio_start(data)
                 stream_sid = start_info["streamSid"]
                 call_sid = start_info["callSid"]
-                from_number = start_info["from_number"]
                 tenant_id = start_info["tenant_id"]
+
                 if is_debug():
                     logger.info(
                         "TWILIO_WS_START streamSid=%s callSid=%s from=%s tenant=%s",
                         stream_sid,
                         call_sid,
-                        from_number,
+                        start_info["from_number"],
                         tenant_id,
                     )
+
+                if openai_ws is None:
+                    try:
+                        openai_ws = await create_realtime_session()
+                    except Exception as e:
+                        logger.warning("FLOW_A openai_session_failed err=%s", type(e).__name__)
+                        break
+
+                    sender_task = asyncio.create_task(twilio_audio_sender())
+                    openai_task = asyncio.create_task(openai_event_loop())
                 continue
 
             if event == "media":
-                media_bytes = parse_twilio_media(data)
-                if media_bytes is None:
-                    if is_debug():
-                        logger.info("TWILIO_WS_MEDIA_INVALID streamSid=%s", stream_sid)
+                if openai_ws is None:
                     continue
-                _ = media_bytes
-
-                if waiting_audio_active and waiting_started_ms is not None:
-                    elapsed = int(time.monotonic() * 1000) - waiting_started_ms
-                    if elapsed >= VOICE_WAIT_SOUND_TRIGGER_MS and is_debug():
-                        logger.info(
-                            "VOICE_WAIT_THRESHOLD_REACHED elapsed_ms=%s threshold_ms=%s",
-                            elapsed,
-                            VOICE_WAIT_SOUND_TRIGGER_MS,
-                        )
+                payload_b64 = parse_twilio_media_payload_b64(data)
+                if payload_b64 is None:
+                    continue
+                try:
+                    await openai_send({"type": "input_audio_buffer.append", "audio": payload_b64})
+                except Exception:
+                    stop_event.set()
+                    break
                 continue
 
             if is_twilio_stop(data):
                 if is_debug():
                     logger.info("TWILIO_WS_STOP streamSid=%s callSid=%s", stream_sid, call_sid)
-                notify_wait_end()
+                stop_event.set()
                 break
 
+    except WebSocketDisconnect:
+        stop_event.set()
     finally:
-        notify_wait_end()
-        if websocket.client_state == WebSocketState.CONNECTED:
-            await websocket.close()
+        stop_event.set()
 
-        _ = from_number
+        for t in (sender_task, openai_task):
+            try:
+                if t is not None:
+                    t.cancel()
+            except Exception:
+                pass
+
+        try:
+            if openai_ws is not None:
+                await openai_ws.close()
+        except Exception:
+            pass
+
+        if websocket.client_state == WebSocketState.CONNECTED:
+            try:
+                await websocket.close()
+            except Exception:
+                pass
+
         _ = tenant_id
-        _ = notify_wait_start
+        _ = call_sid
 
 
 def _has_ws_route(app: FastAPI, path: str) -> bool:
-    for route in app.routes:
-        if getattr(route, "path", None) == path:
-            return True
-    return False
+    return any(getattr(route, "path", None) == path for route in app.routes)
 
 
 def selftests() -> dict:
@@ -218,15 +460,10 @@ def selftests() -> dict:
         "start": {
             "streamSid": "MZ123",
             "callSid": "CA123",
-            "customParameters": {
-                "tenant_id": " tenant-a ",
-                "tenant": "blocked",
-                "from_number": " +15551234567 ",
-            },
+            "customParameters": {"tenant_id": " tenant-a ", "tenant": "blocked", "from_number": " +15551234567 "},
         },
     }
-    start_parsed = parse_twilio_start(start_evt)
-    if start_parsed != {
+    if parse_twilio_start(start_evt) != {
         "streamSid": "MZ123",
         "callSid": "CA123",
         "from_number": "+15551234567",
@@ -234,16 +471,16 @@ def selftests() -> dict:
     }:
         return {"ok": False, "message": "parse_twilio_start failed"}
 
-    if parse_twilio_start({"event": "start", "start": {"customParameters": {"tenant": "x"}}})[
-        "tenant_id"
-    ] is not None:
+    if parse_twilio_start({"event": "start", "start": {"customParameters": {"tenant": "x"}}})["tenant_id"] is not None:
         return {"ok": False, "message": "tenant_id allowlist failed"}
 
     if parse_twilio_media({"event": "media", "media": {"payload": "aGVsbG8="}}) != b"hello":
         return {"ok": False, "message": "parse_twilio_media valid payload failed"}
-
     if parse_twilio_media({"event": "media", "media": {"payload": "*"}}) is not None:
         return {"ok": False, "message": "parse_twilio_media malformed payload failed"}
+
+    if parse_twilio_media_payload_b64({"event": "media", "media": {"payload": "aGVsbG8="}}) != "aGVsbG8=":
+        return {"ok": False, "message": "parse_twilio_media_payload_b64 failed"}
 
     if not is_twilio_stop({"event": "stop"}) or is_twilio_stop({"event": "media"}):
         return {"ok": False, "message": "is_twilio_stop failed"}
@@ -251,6 +488,8 @@ def selftests() -> dict:
     env_reset = {
         "VOZ_FEATURE_SAMPLE": "0",
         "VOZ_FEATURE_ADMIN_QUALITY": "0",
+        "VOZ_FEATURE_ACCESS_GATE": "0",
+        "VOZ_FEATURE_WHATSAPP_IN": "0",
     }
     with _temp_env({**env_reset, "VOZ_FEATURE_VOICE_FLOW_A": "0"}):
         off_app = FastAPI()
@@ -273,18 +512,15 @@ def security_checks() -> dict:
     if raw is None and enabled:
         return {"ok": False, "message": "VOZ_FEATURE_VOICE_FLOW_A must default OFF"}
 
-    tenant_ok = parse_twilio_start(
-        {
-            "event": "start",
-            "start": {"customParameters": {"tenant_id": " tenant-a ", "tenant": "wrong"}},
-        }
-    )["tenant_id"]
+    tenant_ok = parse_twilio_start({"event": "start", "start": {"customParameters": {"tenant_id": " tenant-a "}}})[
+        "tenant_id"
+    ]
     if tenant_ok != "tenant-a":
         return {"ok": False, "message": "tenant_id strip/allowlist failed"}
 
-    tenant_blocked = parse_twilio_start(
-        {"event": "start", "start": {"customParameters": {"tenant": "wrong"}}}
-    )["tenant_id"]
+    tenant_blocked = parse_twilio_start({"event": "start", "start": {"customParameters": {"tenant": "wrong"}}})[
+        "tenant_id"
+    ]
     if tenant_blocked is not None:
         return {"ok": False, "message": "tenant_id must come from allowlist only"}
 
@@ -292,7 +528,7 @@ def security_checks() -> dict:
 
 
 def load_profile() -> dict:
-    return {"hint": "ws-parse", "p50_ms": 10, "p95_ms": 50}
+    return {"hint": "twilio-openai-bridge", "p50_ms": 10, "p95_ms": 50}
 
 
 FEATURE = {
