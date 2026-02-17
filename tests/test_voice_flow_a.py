@@ -36,7 +36,29 @@ def test_parse_twilio_start_extracts_allowlisted_custom_params() -> None:
         "callSid": "CA111",
         "from_number": "+15550001111",
         "tenant_id": "tenant-1",
+        "tenant_mode": None,
+        "rid": "CA111",
     }
+
+
+def test_parse_twilio_start_extracts_tenant_mode_and_rid() -> None:
+    parsed = parse_twilio_start(
+        {
+            "event": "start",
+            "start": {
+                "streamSid": "MZ222",
+                "callSid": "CA222",
+                "customParameters": {
+                    "tenant_id": "tenant-2",
+                    "tenant_mode": "shared",
+                    "rid": "RID-222",
+                },
+            },
+        }
+    )
+    assert parsed["tenant_id"] == "tenant-2"
+    assert parsed["tenant_mode"] == "shared"
+    assert parsed["rid"] == "RID-222"
 
 
 def test_parse_twilio_media_handles_valid_and_malformed_payload() -> None:
