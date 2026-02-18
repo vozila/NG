@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from core.app import create_app
 from features.voice_flow_a import (
+    _build_openai_session_update,
+    _build_twilio_clear_message,
+    _chunk_mulaw_frames,
     OutgoingAudioBuffers,
     WaitingAudioConfig,
     WaitingAudioController,
@@ -145,3 +148,33 @@ def test_main_lane_always_wins_over_aux_lane() -> None:
 
     picked2 = pick_next_outgoing_frame(buffers, thinking_audio_active=True)
     assert picked2 == ("aux", b"AUX")
+
+
+def test_chunk_mulaw_frames_yields_160_byte_frames_with_remainder() -> None:
+    remainder = bytearray()
+    out1 = _chunk_mulaw_frames(remainder, b"x" * 200, frame_bytes=160)
+    assert out1 == [b"x" * 160]
+    assert len(remainder) == 40
+
+    out2 = _chunk_mulaw_frames(remainder, b"y" * 120, frame_bytes=160)
+    assert len(out2) == 1
+    assert len(out2[0]) == 160
+    assert len(remainder) == 0
+
+
+def test_build_twilio_clear_message() -> None:
+    assert _build_twilio_clear_message("MZ123") == {"event": "clear", "streamSid": "MZ123"}
+
+
+def test_build_openai_session_update_uses_pcmu_and_server_vad() -> None:
+    msg = _build_openai_session_update(voice="marin", instructions="Be brief.")
+    assert msg["type"] == "session.update"
+    assert msg["session"]["output_modalities"] == ["audio"]
+    assert msg["session"]["audio"]["input"]["format"]["type"] == "audio/pcmu"
+    assert msg["session"]["audio"]["output"]["format"]["type"] == "audio/pcmu"
+    assert msg["session"]["audio"]["output"]["voice"] == "marin"
+    assert msg["session"]["audio"]["input"]["turn_detection"] == {
+        "type": "server_vad",
+        "create_response": True,
+        "interrupt_response": True,
+    }
