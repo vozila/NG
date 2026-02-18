@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "ts": 1771292250,
+  "ts": 1771374827,
   "enabled_features": [
     "admin_quality",
     "sample"
@@ -15,7 +15,7 @@
     {
       "feature": "sample",
       "ok": true,
-      "ms": 0.01,
+      "ms": 0.0,
       "message": "sample selftest ok"
     }
   ],

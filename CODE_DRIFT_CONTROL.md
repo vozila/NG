@@ -49,3 +49,8 @@ For every merge, capture ≤5 log lines or outputs proving:
 - `features/voice_flow_a.py`: parse and retain `tenant_id`, `tenant_mode`, `rid` from Twilio start custom parameters (debug-gated breadcrumbs).
 - `tests/test_voice_flow_a.py`: parser expectations updated for `tenant_mode` and `rid`.
 - `ops/JOURNAL.md`: journaled feature rollout details, flags, endpoints, rollback.
+
+## 2026-02-18 — Core DB Event Store Scaffold
+- `core/db.py` (new): SQLite-backed multi-tenant scaffold, idempotent schema init, append-only `events` APIs (`emit_event`, `query_events`) with strict tenant scoping.
+- `tests/test_db_event_store.py` (new): schema creation, insert/query, tenant isolation, idempotency-key behavior coverage.
+- `ops/JOURNAL.md`: appended TASK-0200 implementation notes (env vars, rollback guidance).

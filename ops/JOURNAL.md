@@ -76,3 +76,17 @@ Endpoints:
 Rollback instruction:
 - Set `VOZ_FEATURE_SHARED_LINE_ACCESS=0` to disable routing feature and unmount routes.
 - If Twilio webhook was repointed to `/twilio/voice`, repoint it back to the previous handler.
+
+## 2026-02-18 — TASK-0200 core DB event store scaffold
+What was added:
+- New module `core/db.py` with SQLite DB bootstrap (`VOZ_DB_PATH`, default `ops/vozlia_ng.sqlite3`), idempotent schema init, and tenant-scoped event APIs: `emit_event(...)` and `query_events(...)`.
+- Schema includes `tenants` and canonical append-only `events` (`event_id`, `tenant_id`, `rid`, `event_type`, `ts`, `payload_json`, `trace_id`, `idempotency_key`) plus indexes on `(tenant_id, ts)` and `(tenant_id, event_type, ts)`.
+- New tests in `tests/test_db_event_store.py` for schema creation, insert/query, tenant isolation, and idempotency-key behavior.
+
+Env vars:
+- `VOZ_DB_PATH` (default `ops/vozlia_ng.sqlite3`; dev fallback can be `:memory:`).
+
+Rollback notes:
+- Keep DB layer dormant by not importing/calling it from feature hot paths until explicitly enabled.
+- For non-persistent local runs, set `VOZ_DB_PATH=:memory:`.
+- Revert the task commit or stop calling `core.db` APIs (no migrations introduced).
