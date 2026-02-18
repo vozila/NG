@@ -77,6 +77,9 @@ def test_build_openai_session_update_uses_legacy_ulaw_session_schema() -> None:
 
     assert msg["session"]["turn_detection"] == {
         "type": "server_vad",
-        "create_response": True,
+        "threshold": 0.5,
+        "silence_duration_ms": 500,
+        "create_response": False,
         "interrupt_response": True,
     }
+    assert msg["session"]["input_audio_transcription"] == {"model": "gpt-4o-mini-transcribe"}

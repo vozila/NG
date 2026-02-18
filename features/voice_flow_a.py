@@ -115,7 +115,8 @@ def _build_openai_session_update(*, voice: str, instructions: str | None) -> dic
     We do send:
       - modalities: ["audio", "text"]
       - top-level voice + g711_ulaw input/output audio formats
-      - server_vad with interrupt_response
+      - server_vad with create_response disabled (legacy control loop)
+      - input audio transcription enabled
     """
     session: dict[str, Any] = {
         "modalities": ["audio", "text"],
@@ -124,9 +125,12 @@ def _build_openai_session_update(*, voice: str, instructions: str | None) -> dic
         "output_audio_format": "g711_ulaw",
         "turn_detection": {
             "type": "server_vad",
-            "create_response": True,
+            "threshold": 0.5,
+            "silence_duration_ms": 500,
+            "create_response": False,
             "interrupt_response": True,
         },
+        "input_audio_transcription": {"model": "gpt-4o-mini-transcribe"},
     }
     if instructions:
         session["instructions"] = instructions
@@ -229,11 +233,10 @@ async def twilio_stream(websocket: WebSocket) -> None:
     openai_input_blocked_unknown_param = False
     logged_session_created = False
     logged_session_updated = False
+    active_response_id: str | None = None
     turn_seq = 0
-    turn_active = False
     turn_logged_speech_started = False
-    turn_logged_speech_stopped = False
-    turn_logged_commit = False
+    turn_logged_transcript = False
     turn_logged_response_create = False
     turn_logged_audio_delta = False
 
@@ -260,9 +263,10 @@ async def twilio_stream(websocket: WebSocket) -> None:
 
     async def _openai_to_twilio_loop() -> None:
         nonlocal logged_session_created, logged_session_updated, openai_input_blocked_unknown_param
-        nonlocal turn_seq, turn_active
-        nonlocal turn_logged_speech_started, turn_logged_speech_stopped
-        nonlocal turn_logged_commit, turn_logged_response_create, turn_logged_audio_delta
+        nonlocal active_response_id
+        nonlocal turn_seq
+        nonlocal turn_logged_speech_started, turn_logged_transcript
+        nonlocal turn_logged_response_create, turn_logged_audio_delta
         while True:
             raw = await openai_ws.recv()
             evt = json.loads(raw)
@@ -283,46 +287,57 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 continue
 
             if etype == "error":
-                _dbg(f"OPENAI_ERROR evt={evt!r}")
                 err = evt.get("error")
-                if isinstance(err, dict) and err.get("code") == "unknown_parameter":
+                code = err.get("code") if isinstance(err, dict) else None
+                if code == "unknown_parameter":
                     openai_input_blocked_unknown_param = True
+                if code != "response_cancel_not_active":
+                    _dbg(f"OPENAI_ERROR evt={evt!r}")
                 continue
 
             if etype == "input_audio_buffer.speech_started":
-                if not turn_active:
-                    turn_seq += 1
-                    turn_active = True
-                    turn_logged_speech_started = False
-                    turn_logged_speech_stopped = False
-                    turn_logged_commit = False
-                    turn_logged_response_create = False
-                    turn_logged_audio_delta = False
+                turn_seq += 1
+                turn_logged_speech_started = False
+                turn_logged_transcript = False
+                turn_logged_response_create = False
+                turn_logged_audio_delta = False
                 buffers.main.clear()
                 wait_ctl.on_user_speech_started(buffers=buffers)
                 sid = stream_sid_ref.get("streamSid")
                 if sid:
                     async with send_lock:
                         await websocket.send_text(json.dumps(_build_twilio_clear_msg(sid)))
+                    _dbg("TWILIO_CLEAR_SENT")
+                if active_response_id:
+                    await openai_ws.send(json.dumps({"type": "response.cancel"}))
                 if not turn_logged_speech_started:
                     _dbg(f"OPENAI_SPEECH_STARTED turn={turn_seq}")
                     turn_logged_speech_started = True
                 continue
 
-            if etype in ("input_audio_buffer.speech_stopped", "input_audio_buffer.speech_ended"):
-                if turn_active and not turn_logged_speech_stopped:
-                    _dbg(f"OPENAI_SPEECH_STOPPED turn={turn_seq} etype={etype}")
-                    turn_logged_speech_stopped = True
-                await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
-                if turn_active and not turn_logged_commit:
-                    _dbg(f"OPENAI_INPUT_COMMIT_SENT turn={turn_seq}")
-                    turn_logged_commit = True
+            if etype == "conversation.item.input_audio_transcription.completed":
+                transcript = (evt.get("transcript") or "").strip()
+                if not transcript:
+                    continue
+                if not turn_logged_transcript:
+                    _dbg(f"OPENAI_TRANSCRIPT completed len={len(transcript)} turn={turn_seq}")
+                    turn_logged_transcript = True
+                if active_response_id is not None:
+                    continue
                 await openai_ws.send(
                     json.dumps({"type": "response.create", "response": {"modalities": ["audio", "text"]}})
                 )
-                if turn_active and not turn_logged_response_create:
-                    _dbg(f"OPENAI_RESPONSE_CREATE_SENT turn={turn_seq}")
+                if not turn_logged_response_create:
+                    _dbg(f"OPENAI_RESPONSE_CREATE_SENT rid={turn_seq}")
                     turn_logged_response_create = True
+                continue
+
+            if etype == "response.created":
+                response = evt.get("response") if isinstance(evt.get("response"), dict) else {}
+                rid = response.get("id")
+                if isinstance(rid, str) and rid:
+                    active_response_id = rid
+                    _dbg(f"OPENAI_RESPONSE_CREATED id={rid}")
                 continue
 
             if etype == "response.output_audio.delta":
@@ -340,14 +355,19 @@ async def twilio_stream(websocket: WebSocket) -> None:
                         buffers.main.popleft()
                     buffers.main.append(f)
 
-                if turn_active and not turn_logged_audio_delta:
+                if not turn_logged_audio_delta:
                     _dbg(f"OPENAI_AUDIO_DELTA_RECEIVED turn={turn_seq} etype=response.output_audio.delta")
                     turn_logged_audio_delta = True
                 continue
 
             if etype == "response.done":
-                _dbg("OPENAI_RESPONSE_DONE")
-                turn_active = False
+                response = evt.get("response") if isinstance(evt.get("response"), dict) else {}
+                rid = response.get("id")
+                _dbg(f"OPENAI_RESPONSE_DONE id={rid}")
+                if isinstance(rid, str) and rid and rid == active_response_id:
+                    active_response_id = None
+                if rid is None:
+                    active_response_id = None
                 continue
 
     async def _send_openai_session_update() -> None:
