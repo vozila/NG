@@ -114,24 +114,18 @@ def _build_openai_session_update(*, voice: str, instructions: str | None) -> dic
 
     We do send:
       - modalities: ["audio"]
-      - audio.input/output format: audio/pcmu (G.711 μ-law)
+      - top-level voice + g711_ulaw input/output audio formats
       - server_vad with interrupt_response
     """
     session: dict[str, Any] = {
         "modalities": ["audio"],
-        "audio": {
-            "input": {
-                "format": {"type": "audio/pcmu"},
-                "turn_detection": {
-                    "type": "server_vad",
-                    "create_response": True,
-                    "interrupt_response": True,
-                },
-            },
-            "output": {
-                "format": {"type": "audio/pcmu"},
-                "voice": voice,
-            },
+        "voice": voice,
+        "input_audio_format": "g711_ulaw",
+        "output_audio_format": "g711_ulaw",
+        "turn_detection": {
+            "type": "server_vad",
+            "create_response": True,
+            "interrupt_response": True,
         },
     }
     if instructions:
@@ -251,15 +245,11 @@ async def twilio_stream(websocket: WebSocket) -> None:
 
     async def _twilio_to_openai_loop() -> None:
         nonlocal openai_input_blocked_unknown_param
-        count = 0
         while True:
             audio_b64 = await in_q.get()
             if openai_input_blocked_unknown_param:
                 continue
             await openai_ws.send(json.dumps({"type": "input_audio_buffer.append", "audio": audio_b64}))
-            count += 1
-            if is_debug() and (count == 1 or count % 50 == 0):
-                _dbg(f"OPENAI_AUDIO_IN count={count} qsize={in_q.qsize()}")
 
     async def _openai_to_twilio_loop() -> None:
         nonlocal logged_session_created, logged_session_updated, openai_input_blocked_unknown_param
@@ -271,20 +261,14 @@ async def twilio_stream(websocket: WebSocket) -> None:
             if etype == "session.created":
                 if not logged_session_created:
                     session = evt.get("session") if isinstance(evt.get("session"), dict) else {}
-                    _dbg(
-                        "OPENAI_SESSION_CREATED "
-                        f"keys={list(session.keys())} modalities={session.get('modalities')}"
-                    )
+                    _dbg(f"OPENAI_SESSION_CREATED keys={list(session.keys())}")
                     logged_session_created = True
                 continue
 
             if etype == "session.updated":
                 if not logged_session_updated:
                     session = evt.get("session") if isinstance(evt.get("session"), dict) else {}
-                    _dbg(
-                        "OPENAI_SESSION_UPDATED "
-                        f"keys={list(session.keys())} modalities={session.get('modalities')}"
-                    )
+                    _dbg(f"OPENAI_SESSION_UPDATED keys={list(session.keys())}")
                     logged_session_updated = True
                 continue
 
@@ -320,8 +304,6 @@ async def twilio_stream(websocket: WebSocket) -> None:
                         buffers.main.popleft()
                     buffers.main.append(f)
 
-                if is_debug():
-                    _dbg(f"OPENAI_AUDIO_DELTA frames={len(frames)} main_q={len(buffers.main)}")
                 continue
 
             if etype == "response.done":

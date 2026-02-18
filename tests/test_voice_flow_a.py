@@ -63,18 +63,19 @@ def test_build_twilio_clear_msg() -> None:
     assert _build_twilio_clear_msg("MZ123") == {"event": "clear", "streamSid": "MZ123"}
 
 
-def test_build_openai_session_update_uses_modalities_pcmu_and_server_vad() -> None:
+def test_build_openai_session_update_uses_legacy_ulaw_session_schema() -> None:
     msg = _build_openai_session_update(voice="marin", instructions="Be brief.")
 
     assert msg["type"] == "session.update"
     assert msg["session"]["modalities"] == ["audio"]
+    assert msg["session"]["voice"] == "marin"
+    assert msg["session"]["input_audio_format"] == "g711_ulaw"
+    assert msg["session"]["output_audio_format"] == "g711_ulaw"
     assert "output_modalities" not in msg["session"]
     assert "type" not in msg["session"]
+    assert "audio" not in msg["session"]
 
-    assert msg["session"]["audio"]["input"]["format"]["type"] == "audio/pcmu"
-    assert msg["session"]["audio"]["output"]["format"]["type"] == "audio/pcmu"
-    assert msg["session"]["audio"]["output"]["voice"] == "marin"
-    assert msg["session"]["audio"]["input"]["turn_detection"] == {
+    assert msg["session"]["turn_detection"] == {
         "type": "server_vad",
         "create_response": True,
         "interrupt_response": True,
