@@ -18,10 +18,9 @@ import asyncio
 import base64
 import json
 import os
-import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import quote_plus
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -114,12 +113,12 @@ def _build_openai_session_update(*, voice: str, instructions: str | None) -> dic
     So we do NOT send `session.type`.
 
     We do send:
-      - output_modalities: ["audio"]
+      - modalities: ["audio"]
       - audio.input/output format: audio/pcmu (G.711 μ-law)
       - server_vad with interrupt_response
     """
     session: dict[str, Any] = {
-        "output_modalities": ["audio"],
+        "modalities": ["audio"],
         "audio": {
             "input": {
                 "format": {"type": "audio/pcmu"},
@@ -233,6 +232,9 @@ async def twilio_stream(websocket: WebSocket) -> None:
     sender_task: asyncio.Task | None = None
     in_task: asyncio.Task | None = None
     out_task: asyncio.Task | None = None
+    openai_input_blocked_unknown_param = False
+    logged_session_created = False
+    logged_session_updated = False
 
     def _drop_oldest_put(item: str) -> None:
         try:
@@ -248,26 +250,49 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 pass
 
     async def _twilio_to_openai_loop() -> None:
+        nonlocal openai_input_blocked_unknown_param
         count = 0
         while True:
             audio_b64 = await in_q.get()
+            if openai_input_blocked_unknown_param:
+                continue
             await openai_ws.send(json.dumps({"type": "input_audio_buffer.append", "audio": audio_b64}))
             count += 1
             if is_debug() and (count == 1 or count % 50 == 0):
                 _dbg(f"OPENAI_AUDIO_IN count={count} qsize={in_q.qsize()}")
 
     async def _openai_to_twilio_loop() -> None:
+        nonlocal logged_session_created, logged_session_updated, openai_input_blocked_unknown_param
         while True:
             raw = await openai_ws.recv()
             evt = json.loads(raw)
             etype = evt.get("type")
 
-            if etype in ("session.created", "session.updated"):
-                _dbg("OPENAI_SESSION_UPDATED")
+            if etype == "session.created":
+                if not logged_session_created:
+                    session = evt.get("session") if isinstance(evt.get("session"), dict) else {}
+                    _dbg(
+                        "OPENAI_SESSION_CREATED "
+                        f"keys={list(session.keys())} modalities={session.get('modalities')}"
+                    )
+                    logged_session_created = True
+                continue
+
+            if etype == "session.updated":
+                if not logged_session_updated:
+                    session = evt.get("session") if isinstance(evt.get("session"), dict) else {}
+                    _dbg(
+                        "OPENAI_SESSION_UPDATED "
+                        f"keys={list(session.keys())} modalities={session.get('modalities')}"
+                    )
+                    logged_session_updated = True
                 continue
 
             if etype == "error":
                 _dbg(f"OPENAI_ERROR evt={evt!r}")
+                err = evt.get("error")
+                if isinstance(err, dict) and err.get("code") == "unknown_parameter":
+                    openai_input_blocked_unknown_param = True
                 continue
 
             if etype == "input_audio_buffer.speech_started":
@@ -302,6 +327,11 @@ async def twilio_stream(websocket: WebSocket) -> None:
             if etype == "response.done":
                 _dbg("OPENAI_RESPONSE_DONE")
                 continue
+
+    async def _send_openai_session_update() -> None:
+        nonlocal openai_input_blocked_unknown_param
+        await openai_ws.send(json.dumps(_build_openai_session_update(voice=voice, instructions=instructions)))
+        openai_input_blocked_unknown_param = False
 
     try:
         sender_task = asyncio.create_task(
@@ -340,9 +370,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     try:
                         openai_ws = await _connect_openai_ws(model=model)
                         _dbg("OPENAI_WS_CONNECTED")
-                        await openai_ws.send(
-                            json.dumps(_build_openai_session_update(voice=voice, instructions=instructions))
-                        )
+                        await _send_openai_session_update()
                         _dbg("OPENAI_SESSION_UPDATE_SENT")
                         in_task = asyncio.create_task(_twilio_to_openai_loop())
                         out_task = asyncio.create_task(_openai_to_twilio_loop())
