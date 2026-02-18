@@ -5,6 +5,7 @@ from features.voice_flow_a import (
     _build_openai_session_update,
     _build_twilio_clear_msg,
     _chunk_to_frames,
+    _resolve_actor_mode_policy,
     OutgoingAudioBuffers,
     WaitingAudioController,
 )
@@ -83,3 +84,60 @@ def test_build_openai_session_update_uses_legacy_ulaw_session_schema() -> None:
         "interrupt_response": True,
     }
     assert msg["session"]["input_audio_transcription"] == {"model": "gpt-4o-mini-transcribe"}
+
+
+def test_resolve_actor_mode_policy_unknown_mode_defaults_to_client(monkeypatch) -> None:
+    monkeypatch.setenv("VOZ_FLOW_A_ACTOR_MODE_POLICY", "1")
+    monkeypatch.setenv("VOZ_OPENAI_REALTIME_VOICE", "marin")
+    monkeypatch.setenv("VOZ_OPENAI_REALTIME_VOICE_CLIENT", "alloy")
+    monkeypatch.setenv("VOZ_OPENAI_REALTIME_INSTRUCTIONS_CLIENT", "Client protocol")
+
+    voice, instructions = _resolve_actor_mode_policy("tenant_demo", "unexpected")
+    assert voice == "alloy"
+    assert instructions == "Client protocol"
+
+
+def test_resolve_actor_mode_policy_uses_tenant_json_for_owner(monkeypatch) -> None:
+    monkeypatch.setenv("VOZ_FLOW_A_ACTOR_MODE_POLICY", "1")
+    monkeypatch.setenv(
+        "VOZ_TENANT_MODE_POLICY_JSON",
+        (
+            '{"tenant_demo":{"client":{"instructions":"client default","voice":"marin"},'
+            '"owner":{"instructions":"owner analytics","voice":"cedar"}}}'
+        ),
+    )
+    monkeypatch.setenv("VOZ_OPENAI_REALTIME_VOICE_OWNER", "alloy")
+    monkeypatch.setenv("VOZ_OPENAI_REALTIME_INSTRUCTIONS_OWNER", "owner env")
+
+    voice, instructions = _resolve_actor_mode_policy("tenant_demo", "owner")
+    assert voice == "cedar"
+    assert instructions == "owner analytics"
+
+
+def test_resolve_actor_mode_policy_falls_back_to_mode_env_when_json_missing(monkeypatch) -> None:
+    monkeypatch.setenv("VOZ_FLOW_A_ACTOR_MODE_POLICY", "1")
+    monkeypatch.delenv("VOZ_TENANT_MODE_POLICY_JSON", raising=False)
+    monkeypatch.setenv("VOZ_OPENAI_REALTIME_VOICE", "marin")
+    monkeypatch.setenv("VOZ_OPENAI_REALTIME_INSTRUCTIONS", "base instructions")
+    monkeypatch.setenv("VOZ_OPENAI_REALTIME_VOICE_OWNER", "alloy")
+    monkeypatch.setenv("VOZ_OPENAI_REALTIME_INSTRUCTIONS_OWNER", "owner env instructions")
+
+    voice, instructions = _resolve_actor_mode_policy("tenant_demo", "owner")
+    assert voice == "alloy"
+    assert instructions == "owner env instructions"
+
+
+def test_resolve_actor_mode_policy_when_kill_switch_off_uses_base_env(monkeypatch) -> None:
+    monkeypatch.setenv("VOZ_FLOW_A_ACTOR_MODE_POLICY", "0")
+    monkeypatch.setenv("VOZ_OPENAI_REALTIME_VOICE", "marin")
+    monkeypatch.setenv("VOZ_OPENAI_REALTIME_INSTRUCTIONS", "base instructions")
+    monkeypatch.setenv("VOZ_OPENAI_REALTIME_VOICE_OWNER", "alloy")
+    monkeypatch.setenv("VOZ_OPENAI_REALTIME_INSTRUCTIONS_OWNER", "owner env instructions")
+    monkeypatch.setenv(
+        "VOZ_TENANT_MODE_POLICY_JSON",
+        '{"tenant_demo":{"owner":{"instructions":"owner analytics","voice":"cedar"}}}',
+    )
+
+    voice, instructions = _resolve_actor_mode_policy("tenant_demo", "owner")
+    assert voice == "marin"
+    assert instructions == "base instructions"

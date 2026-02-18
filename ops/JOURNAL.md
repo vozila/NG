@@ -92,3 +92,28 @@ Quality gates (local ZIP snapshot):
 - compileall ✅
 - ruff ✅
 - pytest ✅
+
+## 2026-02-18 — TASK-0204 Flow A actor_mode policy (AUTO-SUMMARY PACK)
+What changed:
+- Added `actor_mode` policy resolver in `features/voice_flow_a.py` with kill-switch `VOZ_FLOW_A_ACTOR_MODE_POLICY` (default OFF).
+- Flow A now reads `start.customParameters.actor_mode`, validates to `client|owner` with fail-closed default `client`, and selects mode-specific `voice`/`instructions` using:
+  - `VOZ_TENANT_MODE_POLICY_JSON` (tenant+mode preferred)
+  - mode env fallbacks (`VOZ_OPENAI_REALTIME_INSTRUCTIONS_CLIENT|OWNER`, `VOZ_OPENAI_REALTIME_VOICE_CLIENT|OWNER`)
+  - existing globals (`VOZ_OPENAI_REALTIME_INSTRUCTIONS`, `VOZ_OPENAI_REALTIME_VOICE`)
+- `session.update` uses the selected policy values; transport/session schema remains unchanged.
+- Added debug breadcrumbs (debug-only):
+  - `TWILIO_WS_START ... actor_mode=...`
+  - `VOICE_FLOW_A_START ... actor_mode=...`
+  - `VOICE_MODE_SELECTED tenant_id=... actor_mode=... voice=...`
+- Added resolver unit tests in `tests/test_voice_flow_a.py` for unknown-mode defaulting, tenant JSON owner override, mode-env fallback, and policy kill-switch OFF behavior.
+
+Quality evidence:
+- `./.venv/bin/python -m compileall .` ✅
+- `./.venv/bin/python -c "import features.voice_flow_a"` ✅
+- `./.venv/bin/ruff check .` ✅
+- `./.venv/bin/python -m pytest -q` ✅ (`23 passed`)
+- `VOZ_FEATURE_ADMIN_QUALITY=1 VOZ_FEATURE_VOICE_FLOW_A=1 ./.venv/bin/python scripts/run_regression.py` ✅ (`status: ok`)
+
+Rollback:
+- Emergency: `VOZ_FLOW_A_OPENAI_BRIDGE=0`
+- Disable actor-mode policy only: `VOZ_FLOW_A_ACTOR_MODE_POLICY=0`

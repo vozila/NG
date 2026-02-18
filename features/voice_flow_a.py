@@ -63,6 +63,58 @@ def _env_str(name: str, default: str) -> str:
     return raw or default
 
 
+def _normalize_actor_mode(actor_mode: str | None) -> str:
+    mode = (actor_mode or "").strip().lower()
+    return mode if mode in {"client", "owner"} else "client"
+
+
+def _resolve_actor_mode_policy(tenant_id: str | None, actor_mode: str | None) -> tuple[str, str | None]:
+    base_voice = _env_str("VOZ_OPENAI_REALTIME_VOICE", "marin")
+    base_instructions = (os.getenv("VOZ_OPENAI_REALTIME_INSTRUCTIONS") or "").strip() or None
+
+    if not env_flag("VOZ_FLOW_A_ACTOR_MODE_POLICY"):
+        return base_voice, base_instructions
+
+    mode = _normalize_actor_mode(actor_mode)
+    mode_upper = mode.upper()
+
+    tenant_policy_raw = (os.getenv("VOZ_TENANT_MODE_POLICY_JSON") or "").strip()
+    tenant_policy: dict[str, Any] = {}
+    if tenant_policy_raw:
+        try:
+            parsed = json.loads(tenant_policy_raw)
+            if isinstance(parsed, dict):
+                tenant_policy = parsed
+        except Exception:
+            tenant_policy = {}
+
+    mode_policy: dict[str, Any] = {}
+    tenant_block = tenant_policy.get(tenant_id) if tenant_id else None
+    if isinstance(tenant_block, dict):
+        mode_block = tenant_block.get(mode)
+        if isinstance(mode_block, dict):
+            mode_policy = mode_block
+
+    mode_voice = (os.getenv(f"VOZ_OPENAI_REALTIME_VOICE_{mode_upper}") or "").strip() or None
+    mode_instructions = (os.getenv(f"VOZ_OPENAI_REALTIME_INSTRUCTIONS_{mode_upper}") or "").strip() or None
+
+    policy_voice = mode_policy.get("voice")
+    if not isinstance(policy_voice, str) or not policy_voice.strip():
+        policy_voice = None
+    else:
+        policy_voice = policy_voice.strip()
+
+    policy_instructions = mode_policy.get("instructions")
+    if not isinstance(policy_instructions, str) or not policy_instructions.strip():
+        policy_instructions = None
+    else:
+        policy_instructions = policy_instructions.strip()
+
+    voice = policy_voice or mode_voice or base_voice
+    instructions = policy_instructions or mode_instructions or base_instructions
+    return voice, instructions
+
+
 @dataclass
 class OutgoingAudioBuffers:
     # main lane is assistant audio; aux lane reserved for future “thinking chime”
@@ -239,8 +291,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
     # OpenAI bridge state
     bridge_enabled = env_flag("VOZ_FLOW_A_OPENAI_BRIDGE")
     model = _env_str("VOZ_OPENAI_REALTIME_MODEL", "gpt-realtime")
-    voice = _env_str("VOZ_OPENAI_REALTIME_VOICE", "marin")
-    instructions = (os.getenv("VOZ_OPENAI_REALTIME_INSTRUCTIONS") or "").strip() or None
+    voice, instructions = _resolve_actor_mode_policy(None, None)
     q_max = _env_int("VOICE_OPENAI_IN_Q_MAX", 200)
     in_q: asyncio.Queue[str] = asyncio.Queue(maxsize=q_max)
 
@@ -534,15 +585,23 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 custom = start.get("customParameters") or {}
 
                 rid = custom.get("rid") or call_sid
-                tenant_id = custom.get("tenant_id")
+                tenant_id_raw = custom.get("tenant_id")
+                tenant_id = tenant_id_raw if isinstance(tenant_id_raw, str) and tenant_id_raw.strip() else None
                 tenant_mode = custom.get("tenant_mode")
                 from_number = custom.get("from_number")
+                actor_mode_raw = custom.get("actor_mode")
+                actor_mode = _normalize_actor_mode(actor_mode_raw if isinstance(actor_mode_raw, str) else None)
+                voice, instructions = _resolve_actor_mode_policy(tenant_id, actor_mode)
 
                 _dbg(
                     f"TWILIO_WS_START streamSid={stream_sid_ref['streamSid']} callSid={call_sid} "
-                    f"from={from_number} tenant={tenant_id} tenant_mode={tenant_mode} rid={rid}"
+                    f"from={from_number} tenant={tenant_id} tenant_mode={tenant_mode} rid={rid} actor_mode={actor_mode}"
                 )
-                _dbg(f"VOICE_FLOW_A_START tenant_id={tenant_id} tenant_mode={tenant_mode} rid={rid}")
+                _dbg(
+                    f"VOICE_FLOW_A_START tenant_id={tenant_id} tenant_mode={tenant_mode} "
+                    f"rid={rid} actor_mode={actor_mode}"
+                )
+                _dbg(f"VOICE_MODE_SELECTED tenant_id={tenant_id} actor_mode={actor_mode} voice={voice}")
 
                 if bridge_enabled:
                     try:
