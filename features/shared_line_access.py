@@ -239,3 +239,174 @@ async def twilio_voice(request: Request) -> StarletteResponse:
     if to_number != shared_line_number:
         _log(rid, f"routing decision: mode=reject to={to_number} tenant_id=None")
         twiml = _twiml_say_hangup("Wrong number.")
+        return Response(content=twiml, media_type="application/xml")
+
+    _log(rid, f"routing decision: mode=shared to={to_number} tenant_id=None")
+    # IMPORTANT: action URL is escaped inside _twiml_gather_access_code
+    action_url = str(request.url_for("twilio_voice_access_code"))
+    twiml = _twiml_gather_access_code(
+        action_url=action_url,
+        attempt=0,
+        rid=rid,
+        prompt="Please enter your 8 digit business access code.",
+    )
+    return Response(content=twiml, media_type="application/xml")
+
+
+@router.post("/twilio/voice/access-code", name="twilio_voice_access_code")
+async def twilio_voice_access_code(request: Request) -> StarletteResponse:
+    """
+    DTMF callback for shared line:
+    - Validate Digits against VOZ_ACCESS_CODE_MAP_JSON.
+    - If valid: connect to stream with tenant_id
+    - Else: retry up to MAX_INVALID_RETRIES then hang up.
+    """
+    with _feature_enabled_guard():
+        cfg = _load_config()
+
+    q = dict(request.query_params)
+    attempt = int(q.get("attempt", "0") or "0")
+    rid = _clean_str(q.get("rid"))
+
+    body = await request.body()
+    form = _parse_form_urlencoded(body)
+    call_sid = _clean_str(form.get("CallSid"))
+    rid = rid or _rid_from_call_sid(call_sid)
+
+    digits = _clean_str(form.get("Digits")) or ""
+    to_number = _clean_str(form.get("To"))
+    from_number = _clean_str(form.get("From"))
+
+    _log(rid, f"request received: /twilio/voice/access-code attempt={attempt} digits={digits}")
+
+    access_code_map: dict[str, str] = cfg["access_code_map"]
+    stream_url: str = cfg["stream_url"]
+
+    tenant_id = access_code_map.get(digits)
+    if tenant_id:
+        _log(rid, f"access granted: tenant_id={tenant_id}")
+        twiml = _twiml_connect_stream(
+            stream_url=stream_url,
+            rid=rid,
+            tenant_mode="shared",
+            tenant_id=tenant_id,
+            from_number=from_number,
+            to_number=to_number,
+        )
+        return Response(content=twiml, media_type="application/xml")
+
+    # Invalid digits
+    attempt += 1
+    if attempt <= MAX_INVALID_RETRIES:
+        _log(rid, f"access denied: retry attempt={attempt}")
+        action_url = str(request.url_for("twilio_voice_access_code"))
+        twiml = _twiml_gather_access_code(
+            action_url=action_url,
+            attempt=attempt,
+            rid=rid,
+            prompt="Invalid code. Please try again.",
+        )
+        return Response(content=twiml, media_type="application/xml")
+
+    _log(rid, "access denied: max retries")
+    twiml = _twiml_say_hangup("Invalid access code. Goodbye.")
+    return Response(content=twiml, media_type="application/xml")
+
+
+@router.get("/_healthz")
+async def healthz() -> PlainTextResponse:
+    return PlainTextResponse("ok")
+
+
+def _attach(app: FastAPI) -> None:
+    app.include_router(router)
+
+
+def selftests() -> dict[str, Any]:
+    # Import lazily so production runtime doesn't need dev deps.
+    from fastapi.testclient import TestClient  # type: ignore
+
+    app = FastAPI()
+    _attach(app)
+
+    # Enable feature for test
+    os.environ["VOZ_FEATURE_SHARED_LINE_ACCESS"] = "1"
+    os.environ["VOZ_SHARED_LINE_NUMBER"] = "+15551234567"
+    os.environ["VOZ_ACCESS_CODE_MAP_JSON"] = '{"12345678":"tenant_demo"}'
+    os.environ["VOZ_DEDICATED_LINE_MAP_JSON"] = "{}"
+    os.environ["VOZ_TWILIO_STREAM_URL"] = "wss://example.com/twilio/stream"
+
+    c = TestClient(app)
+
+    # Shared line should return Gather and MUST escape '&' in action URL query string (XML-safe).
+    r = c.post(
+        "/twilio/voice",
+        data={"CallSid": "CA_TEST", "To": "+15551234567", "From": "+15550001111"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert r.status_code == 200
+    body = r.text
+    assert "<Gather" in body
+    assert "action=" in body
+    # Ensure query separator is XML-escaped
+    assert "&amp;" in body
+
+    # Valid access code should Connect/Stream
+    r2 = c.post(
+        "/twilio/voice/access-code?attempt=0&rid=CA_TEST",
+        data={
+            "CallSid": "CA_TEST",
+            "To": "+15551234567",
+            "From": "+15550001111",
+            "Digits": "12345678",
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert r2.status_code == 200
+    assert "<Connect>" in r2.text
+    assert "<Stream" in r2.text
+    assert "tenant_demo" in r2.text
+
+    return {"ok": True}
+
+
+def security_checks() -> dict[str, Any]:
+    # Feature is webhook-only and reads env vars; no DB access.
+    # Enforce HTTPS/WSS requirements at config load time.
+    return {"ok": True}
+
+
+def load_profile() -> dict[str, Any]:
+    # Webhook endpoints: very light (parse form + emit TwiML). No load harness here.
+    return {"ok": True}
+
+
+FEATURE = {
+    "key": "shared_line_access",
+    "router": router,
+    "enabled_env": "VOZ_FEATURE_SHARED_LINE_ACCESS",
+    "selftests": selftests,
+    "security_checks": security_checks,
+    "load_profile": load_profile,
+}
+
+
+def mount(app: FastAPI) -> None:
+    """
+    Called by feature loader in some setups; safe to no-op if already mounted.
+    """
+    _attach(app)
+
+
+def install_into_app(app: FastAPI) -> None:
+    """
+    Compatibility hook for older bootstraps.
+    """
+    _attach(app)
+
+
+def ensure_features_loaded(app: FastAPI) -> None:
+    """
+    If you are booting a minimal app and want all enabled features registered.
+    """
+    load_features(app)
