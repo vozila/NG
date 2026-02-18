@@ -1,5 +1,5 @@
 # Vozlia NG — TASKBOARD
-**Date:** 2026-02-15 (America/New_York)
+**Date:** 2026-02-18 (America/New_York)
 
 ## DONE
 - [x] Day 0 Milestone: NG skeleton + loader + registry + admin_quality + sample + scripts + gates green
@@ -8,20 +8,42 @@
 - [x] TASK-0102 — WhatsApp inbound adapter stub
 - [x] Flow A waiting/thinking audio lane foundation: `WaitingAudioController` + aux lane + tests
       (chime default OFF via `VOICE_WAIT_CHIME_ENABLED=0`)
+- [x] TASK-0201.5 — Flow A audible assistant speech (Realtime audio out)
+      - OpenAI emits `response.output_audio.delta`
+      - Server chunks to 160-byte μ-law frames and enqueues “main lane”
+      - Twilio sender loop paces frames back to caller (audible confirmed)
+      - Evidence signatures:
+        - `OPENAI_AUDIO_DELTA_FIRST ...`
+        - `TWILIO_MAIN_FRAME_SENT first=1 ...`
+- [x] Flow A Realtime session update accepted + transcript-driven response loop working
+      - `session.created/session.updated` accepted
+      - `speech_started` → `transcript.completed` → `response.create` → `response.created/done`
 
-## NOW (Day 2+)
-- [ ] Flow A Slice C: outbound audio buffering + pacing + backlog cap for main lane (separate ticket)
-- [ ] Flow A Slice D (remaining): barge-in cancel/clear semantics for OpenAI responses + VAD wiring
-- [ ] Flow A Slice E: OpenAI Realtime bridge (flagged; should consume main lane + respect aux lane)
+## NOW (next high-leverage work)
+- [ ] TASK-0203 — Dual-mode access gating (client vs owner) on the shared number
+      - Generic prompt: “enter your 8-digit access code”
+      - Access code resolves `{tenant_id, actor_mode}`
+      - Pass `actor_mode` through Twilio Stream customParameters
+- [ ] TASK-0204 — Mode policy enforcement (MVP env-only)
+      - Mode-specific instructions by `(tenant_id, actor_mode)`
+      - Mode-aware feature/skill allowlists (fail closed)
+- [ ] Flow A: refine barge-in / clear semantics (anti-regression)
+      - Ensure `TWILIO_CLEAR_SENT` only on actual `speech_started`
+      - Add debounce/guards so we don’t flush model audio unnecessarily
+      - Add deterministic tests for: (a) user interrupts mid-response, (b) silence/noise edge cases
 - [ ] Unified engine router interface (shared across voice/whatsapp/webui)
 
-## Guardrails
+## NEXT (blocked / staged)
+- [ ] Owner analytics (owner-mode only) — QuerySpec → deterministic SQL (blocked by DB readiness + schema)
+- [ ] Client-mode domain features (orders / appointment requests) with notifications (blocked by domain persistence)
+
+## Guardrails (do not break)
 - No cross-feature imports.
 - Every feature behind `VOZ_FEATURE_<NAME>` default OFF.
-- Debug logs only when `VOZLIA_DEBUG=1`.
-- Before merge: compileall + ruff + pytest + regression.
+- Debug logs only when `VOZLIA_DEBUG=1` (no per-frame spam).
+- Before merge: `python -m compileall .` + `ruff check .` + `pytest` + regression run.
 
-## Outstanding tasks
-TASK-0200: Stabilize quality rails (scripts + admin_quality fix; core fix via CORE-CHANGE PR)
-TASK-0201: Implement Flow A OpenAI Realtime bridge (flagged)
-TASK-0202: Implement barge-in + pacing/backlog caps + deterministic tests (flagged)
+## Rollback levers (fast)
+- `VOZ_FLOW_A_OPENAI_BRIDGE=0` disables OpenAI bridge immediately (Twilio stream still works).
+- `VOZ_FEATURE_VOICE_FLOW_A=0` disables WS endpoint entirely.
+- `VOZ_FEATURE_SHARED_LINE_ACCESS=0` disables shared-line routing/access gate.
