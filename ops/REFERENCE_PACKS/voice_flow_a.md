@@ -1,58 +1,68 @@
-# Reference Pack — Flow A Actor Mode Policy (Twilio ↔ OpenAI Realtime)
+# Reference Pack — Voice Flow A (Twilio ↔ OpenAI Realtime)
 
 **Updated:** 2026-02-18 (America/New_York)
 
-This pack defines Flow A actor-mode behavior and rollback levers.
+## 1) Golden behavior loop shape
+1. Twilio `start` arrives with `customParameters` including `tenant_id`, `tenant_mode`, and `ai_mode`.
+2. Flow A configures OpenAI Realtime session (`g711_ulaw` in/out, VAD settings, voice/instructions).
+3. Twilio inbound audio (`media`) is forwarded to OpenAI input buffer.
+4. OpenAI emits transcript/completion events, then `response.output_audio.delta`.
+5. Server decodes each delta payload, chunks to 160-byte μ-law frames, and enqueues paced outbound frames.
+6. Twilio sender loop emits frames to caller; caller hears assistant speech.
+7. On barge-in (`speech_started`), clear/cancel semantics apply immediately.
 
-## 1) Actor Mode Meaning
-- `actor_mode=client`: customer-facing assistant behavior.
-- `actor_mode=owner`: owner-facing assistant behavior (analytics/admin persona, no customer-service tone).
-- Unknown or missing actor mode must default to `client` (fail closed).
+## 2) Cancel/clear semantics
+- `TWILIO_CLEAR_SENT` only at speech_started / barge-in boundaries.
+- On true barge-in while assistant audio is queued/playing:
+  - send Twilio `clear`
+  - cancel active OpenAI response when applicable
+  - stop any waiting/chime aux audio
+- Do not send `clear` on generic state transitions (response created, transcript events, etc.).
 
-## 2) How Actor Mode Is Set
-- Shared-line access code resolves to tenant context in access-gate flow.
-- Access gate passes values through Twilio `<Stream><Parameter .../>` into `start.customParameters`.
-- Flow A reads from:
-  - `start.customParameters.tenant_id`
-  - `start.customParameters.actor_mode`
+## 3) Audio delta -> μ-law chunking
+- Input event: `response.output_audio.delta` base64 payload from OpenAI.
+- Decode payload to raw g711 μ-law bytes.
+- Twilio media frame size target: 160 bytes (20ms at 8kHz μ-law).
+- Chunk decoded bytes into exact 160-byte frames.
+- Queue and send frames at pacing interval (~20ms/frame) to avoid burst/jitter artifacts.
 
-## 3) Policy Resolution (Env-first)
-Gate:
-- `VOZ_FLOW_A_ACTOR_MODE_POLICY=0|1` (default `0`).
+## 4) Failure signatures and fixes
+### A) Modalities validation failure
+- Signature:
+  - `OPENAI_ERROR ... param='response.modalities' ... invalid_value`
+  - Error text indicates valid sets include `['text']` and `['audio','text']`.
+- Fix:
+  - OpenAI response.modalities must be ['audio','text'] (NOT ['audio']).
+  - Prefer model/session-supported modalities from `session.output_modalities`.
 
-When policy gate is `0`:
-- Existing global behavior only:
-  - `VOZ_OPENAI_REALTIME_VOICE` (fallback `marin`)
-  - `VOZ_OPENAI_REALTIME_INSTRUCTIONS`
+### B) No audible speech despite response lifecycle events
+- Signature:
+  - `response.created/response.done` appear, but no `OPENAI_AUDIO_DELTA_FIRST`, or no Twilio frame sends.
+- Fix checklist:
+  - Confirm audio-inclusive modalities (`['audio','text']`).
+  - Confirm delta listener handles `response.output_audio.delta`.
+  - Confirm Twilio μ-law frame size 160 bytes; chunking required.
+  - Confirm sender loop pacing and queue drain are active.
 
-When policy gate is `1`:
-1. Validate `actor_mode` to `client|owner` (else `client`).
-2. Resolve tenant/mode override from `VOZ_TENANT_MODE_POLICY_JSON`:
-   - shape: `{ "tenant_id": { "client": {"instructions": "...", "voice": "..."}, "owner": {...} } }`
-3. If missing, resolve mode globals:
-   - `VOZ_OPENAI_REALTIME_INSTRUCTIONS_CLIENT|OWNER`
-   - `VOZ_OPENAI_REALTIME_VOICE_CLIENT|OWNER`
-4. If still missing, fallback to existing globals:
-   - `VOZ_OPENAI_REALTIME_INSTRUCTIONS`
-   - `VOZ_OPENAI_REALTIME_VOICE`
-5. If still missing, keep safe defaults (voice `marin`, instructions omitted).
+### C) Truncated speech from over-clearing
+- Signature:
+  - `OPENAI_AUDIO_DELTA_FIRST` appears, but user hears clipped/partial output.
+- Fix:
+  - Enforce clear only on actual barge-in boundaries.
+  - Add debounce/guards around noisy `speech_started` edges.
 
-## 4) Expected Debug Breadcrumbs (`VOZLIA_DEBUG=1`)
-- `TWILIO_WS_START ... actor_mode=...`
-- `VOICE_FLOW_A_START ... actor_mode=...`
-- `VOICE_MODE_SELECTED tenant_id=... actor_mode=... voice=...`
+## 5) Dual AI mode propagation
+- Access code routing decides AI mode per tenant:
+  - `ai_mode=customer` for customer-facing protocols
+  - `ai_mode=owner` for owner-facing analytics/protocols
+- Flow A reads mode from `start.customParameters.ai_mode`.
+- Mode affects protocol selection:
+  - voice/instructions persona selection by `(tenant_id, ai_mode)`
+  - owner-only operations denied when mode is `customer` (fail closed on unknown/missing mode)
 
-No per-frame logging changes. Existing first-delta breadcrumbs remain unchanged.
-
-## 5) Session Update Contract
-`session.update` must continue to send selected `voice` and `instructions` plus existing Flow A transport config:
-- `modalities=["audio","text"]`
-- `input_audio_format=g711_ulaw`
-- `output_audio_format=g711_ulaw`
-- `turn_detection.type=server_vad`
-- `turn_detection.create_response=false`
-
-## 6) Rollback Levers
-- Emergency rollback: `VOZ_FLOW_A_OPENAI_BRIDGE=0`
-- Disable actor-mode policy logic only: `VOZ_FLOW_A_ACTOR_MODE_POLICY=0`
-- Full Flow A endpoint off: `VOZ_FEATURE_VOICE_FLOW_A=0`
+## 6) Env routing and policy knobs (MVP-safe)
+- Preferred mapping: `VOZ_ACCESS_CODE_ROUTING_JSON`
+  - code -> `{tenant_id, ai_mode}`
+- Back-compat: `VOZ_ACCESS_CODE_MAP_JSON` remains legacy owner map.
+- Optional customer map: `VOZ_CLIENT_ACCESS_CODE_MAP_JSON`.
+- Feature mode convention: `VOZ_FEATURE_<NAME>_AI_MODES=customer,owner`.

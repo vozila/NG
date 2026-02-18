@@ -16,6 +16,7 @@ Last touched: 2026-02-18 (response.create must request supported modalities; add
 # CHANGELOG (recent)
 # - 2026-02-18: response.create requests modalities=['audio','text'] (per server-supported combos);
 #              store/log session output_modalities; keep first-delta breadcrumbs.
+# - 2026-02-18: read ai_mode from Twilio customParameters and apply mode-specific instructions.
 
 from __future__ import annotations
 
@@ -63,9 +64,30 @@ def _env_str(name: str, default: str) -> str:
     return raw or default
 
 
+def _normalize_ai_mode(ai_mode: str | None) -> str:
+    mode = (ai_mode or "").strip().lower()
+    return mode if mode in {"customer", "owner"} else "customer"
+
+
 def _normalize_actor_mode(actor_mode: str | None) -> str:
     mode = (actor_mode or "").strip().lower()
     return mode if mode in {"client", "owner"} else "client"
+
+
+def _resolve_mode_instructions(ai_mode: str) -> str | None:
+    raw_json = (os.getenv("VOZ_FLOW_A_MODE_INSTRUCTIONS_JSON") or "").strip()
+    if raw_json:
+        try:
+            parsed = json.loads(raw_json)
+            if isinstance(parsed, dict):
+                v = parsed.get(ai_mode)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+        except Exception:
+            pass
+
+    suffix = "CUSTOMER" if ai_mode == "customer" else "OWNER"
+    return (os.getenv(f"VOZ_FLOW_A_INSTRUCTIONS_{suffix}") or "").strip() or None
 
 
 def _resolve_actor_mode_policy(tenant_id: str | None, actor_mode: str | None) -> tuple[str, str | None]:
@@ -303,6 +325,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
     logged_session_created = False
     logged_session_updated = False
     openai_output_modalities: list[str] | None = None
+    logged_mode_selection = False
 
     active_response_id: str | None = None
     response_state: dict[str, Any] = {
@@ -436,9 +459,8 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 if active_response_id is not None:
                     continue
 
-                # IMPORTANT: Your server reports supported combinations: ['text'] and ['audio','text'].
-                # Request audio+text explicitly so output_audio events are enabled.
-                modalities = openai_output_modalities or ["audio", "text"]
+                # Keep output audio enabled deterministically.
+                modalities = ["audio", "text"]
                 await openai_ws.send(json.dumps({"type": "response.create", "response": {"modalities": modalities}}))
 
                 if not turn_logged_response_create:
@@ -589,19 +611,26 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 tenant_id = tenant_id_raw if isinstance(tenant_id_raw, str) and tenant_id_raw.strip() else None
                 tenant_mode = custom.get("tenant_mode")
                 from_number = custom.get("from_number")
-                actor_mode_raw = custom.get("actor_mode")
-                actor_mode = _normalize_actor_mode(actor_mode_raw if isinstance(actor_mode_raw, str) else None)
+                ai_mode_raw = custom.get("ai_mode")
+                ai_mode = _normalize_ai_mode(ai_mode_raw if isinstance(ai_mode_raw, str) else None)
+                # Keep compatibility with existing policy resolver that uses client|owner naming.
+                actor_mode = "owner" if ai_mode == "owner" else "client"
                 voice, instructions = _resolve_actor_mode_policy(tenant_id, actor_mode)
+                mode_instructions = _resolve_mode_instructions(ai_mode)
+                if mode_instructions:
+                    instructions = mode_instructions
 
                 _dbg(
                     f"TWILIO_WS_START streamSid={stream_sid_ref['streamSid']} callSid={call_sid} "
-                    f"from={from_number} tenant={tenant_id} tenant_mode={tenant_mode} rid={rid} actor_mode={actor_mode}"
+                    f"from={from_number} tenant={tenant_id} tenant_mode={tenant_mode} rid={rid} ai_mode={ai_mode}"
                 )
                 _dbg(
                     f"VOICE_FLOW_A_START tenant_id={tenant_id} tenant_mode={tenant_mode} "
-                    f"rid={rid} actor_mode={actor_mode}"
+                    f"rid={rid} ai_mode={ai_mode}"
                 )
-                _dbg(f"VOICE_MODE_SELECTED tenant_id={tenant_id} actor_mode={actor_mode} voice={voice}")
+                if not logged_mode_selection:
+                    _dbg(f"VOICE_FLOW_A_MODE_SELECTED ai_mode={ai_mode} tenant_id={tenant_id} rid={rid}")
+                    logged_mode_selection = True
 
                 if bridge_enabled:
                     try:

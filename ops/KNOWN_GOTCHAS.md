@@ -4,37 +4,27 @@
 
 ## Flow A (Twilio WS ↔ OpenAI Realtime)
 
-### 1) Realtime `response.modalities=['audio']` may be invalid
+### 1) OpenAI response.modalities must be ['audio','text'] (NOT ['audio'])
 Symptom:
-- You see `OPENAI_RESPONSE_CREATE_SENT` then an OpenAI error:
-  - `code=invalid_value`
-  - message includes: supported combinations are `['text']` and `['audio','text']`
+- `OPENAI_ERROR` with `param='response.modalities'` and `code='invalid_value'`.
 
 Fix:
-- Use `['audio','text']` for `response.create.response.modalities`, preferably driven from `session.output_modalities`.
+- Send `response.create.response.modalities=['audio','text']` (or a model-supported combo from `session.output_modalities`).
 
-Evidence signature:
-- `OPENAI_ERROR ... param='response.modalities' message="Invalid modalities: ['audio'] ..."`
-
-### 2) No audible speech even though responses complete
+### 2) Twilio μ-law frame size 160 bytes; chunking required
 Symptom:
-- `OPENAI_RESPONSE_CREATED`/`OPENAI_RESPONSE_DONE` occur
-- No `response.output_audio.delta` events
-- No Twilio outbound frame logs
-
-Checklist:
-- Confirm `response.create` modalities include audio (`['audio','text']`)
-- Confirm you are listening for `response.output_audio.delta` (and optional alias `response.audio.delta`)
-- Confirm you are chunking g711_ulaw bytes into **160-byte** frames and pacing ~20ms per frame
-- Confirm Twilio sender loop is actually sending frames (not always empty)
-
-### 3) Over-aggressive Twilio `clear` can truncate speech
-Symptom:
-- You get `OPENAI_AUDIO_DELTA_FIRST` and `TWILIO_MAIN_FRAME_SENT`, but callers hear only a tiny fragment.
+- Responses complete but no audible speech, or stutter/garble from malformed frame boundaries.
 
 Fix:
-- Send `clear` only on a true `speech_started` (barge-in) event.
-- Consider debouncing noise-triggered speech_started (threshold tuning) before clearing.
+- Decode each `response.output_audio.delta`, then split bytes into 160-byte chunks and pace to Twilio at ~20ms intervals.
+
+### 3) TWILIO_CLEAR_SENT only at speech_started / barge-in boundaries
+Symptom:
+- Assistant audio is repeatedly truncated or disappears after small noise events.
+
+Fix:
+- Send `clear` only when a true user barge-in starts (`speech_started` boundary), not on generic state changes.
+- Add debounce/guards so noise does not trigger unnecessary clears.
 
 ## Observability (general)
 - Logging inside 20ms audio loops is not “free”. Keep per-frame logs OFF; use first-delta breadcrumbs only.

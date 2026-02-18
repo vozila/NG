@@ -117,3 +117,15 @@ Quality evidence:
 Rollback:
 - Emergency: `VOZ_FLOW_A_OPENAI_BRIDGE=0`
 - Disable actor-mode policy only: `VOZ_FLOW_A_ACTOR_MODE_POLICY=0`
+
+## 2026-02-18 — OPS-0300 docs writeback (dual ai_mode + Flow A milestone)
+What changed:
+- Updated planning + continuity docs to formalize `ai_mode=customer|owner` selected by access code, plus MVP env mapping and feature-mode convention.
+- Captured Flow A audio bridge milestone as last-known-good and refreshed Flow A reference pack with loop semantics and fixes.
+
+Proof logs (<=5):
+- `OPENAI_RESPONSE_CREATE_SENT ... modalities=['audio','text']`
+- `OPENAI_RESPONSE_CREATED ...`
+- `OPENAI_AUDIO_DELTA_FIRST ...`
+- `TWILIO_MAIN_FRAME_SENT first=1 ... bytes=160`
+- Caller heard speech.

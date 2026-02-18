@@ -45,3 +45,12 @@ Decision:
 - Do not assume `['audio']` is a valid response modality.
 - Drive `response.create.response.modalities` from `session.output_modalities` (fallback to `['audio','text']`).
 - Treat `invalid_value` on `response.modalities` as a compatibility signal and force the supported combo.
+
+## 2026-02-18 — Access code selects ai_mode and propagates into Flow A
+
+Decision:
+- Access code selects ai_mode (customer vs owner) and mode is propagated into Flow A.
+
+Implications:
+- Shared-line resolver returns `{tenant_id, ai_mode}` and passes `ai_mode` via `start.customParameters.ai_mode`.
+- Mode-specific protocols/instructions must be selected by `(tenant_id, ai_mode)` with fail-closed defaults.

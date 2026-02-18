@@ -31,7 +31,7 @@ router = APIRouter()
 # ---- Constants ----
 MAX_INVALID_RETRIES = 2
 ACCESS_CODE_DIGITS = 8
-ACTOR_MODES = {"client", "owner"}
+AI_MODES = {"customer", "owner"}
 
 
 def _clean_str(v: Any) -> str | None:
@@ -61,7 +61,7 @@ def _parse_json_env(name: str) -> dict[str, str]:
     return out
 
 
-def _parse_access_code_table_env(name: str) -> dict[str, dict[str, str]]:
+def _parse_access_code_routing_env(name: str) -> dict[str, dict[str, str]]:
     raw = os.getenv(name, "").strip()
     if not raw:
         return {}
@@ -77,31 +77,40 @@ def _parse_access_code_table_env(name: str) -> dict[str, dict[str, str]]:
         if not isinstance(code, str) or len(code) != ACCESS_CODE_DIGITS or not code.isdigit():
             raise ValueError(f"{name} must map 8-digit codes")
         if not isinstance(spec, dict):
-            raise ValueError(f"{name} value must include tenant_id and actor_mode")
+            raise ValueError(f"{name} value must include tenant_id and ai_mode")
         tenant_id = _clean_str(spec.get("tenant_id"))
-        actor_mode = _clean_str(spec.get("actor_mode"))
-        if not tenant_id or not actor_mode:
-            raise ValueError(f"{name} value must include tenant_id and actor_mode")
-        if actor_mode not in ACTOR_MODES:
-            raise ValueError(f"{name} actor_mode must be 'client' or 'owner'")
-        out[code] = {"tenant_id": tenant_id, "actor_mode": actor_mode}
+        ai_mode = _clean_str(spec.get("ai_mode"))
+        if not tenant_id or not ai_mode:
+            raise ValueError(f"{name} value must include tenant_id and ai_mode")
+        if ai_mode not in AI_MODES:
+            raise ValueError(f"{name} ai_mode must be 'customer' or 'owner'")
+        out[code] = {"tenant_id": tenant_id, "ai_mode": ai_mode}
     return out
 
 
 def _resolve_access_code(cfg: dict[str, Any], code: str) -> tuple[str, str] | None:
-    access_code_table: dict[str, dict[str, str]] = cfg["access_code_table"]
+    dual_mode_access: bool = cfg["dual_mode_access"]
+    access_code_routing: dict[str, dict[str, str]] = cfg["access_code_routing"]
     client_access_code_map: dict[str, str] = cfg["client_access_code_map"]
     access_code_map: dict[str, str] = cfg["access_code_map"]
 
-    if access_code_table:
-        spec = access_code_table.get(code)
+    # Legacy behavior: single owner map only.
+    if not dual_mode_access:
+        owner_tenant = access_code_map.get(code)
+        if owner_tenant:
+            return owner_tenant, "owner"
+        return None
+
+    # Dual mode behavior (preferred): explicit routing table.
+    if access_code_routing:
+        spec = access_code_routing.get(code)
         if not spec:
             return None
-        return spec["tenant_id"], spec["actor_mode"]
+        return spec["tenant_id"], spec["ai_mode"]
 
     client_tenant = client_access_code_map.get(code)
     if client_tenant:
-        return client_tenant, "client"
+        return client_tenant, "customer"
 
     owner_tenant = access_code_map.get(code)
     if owner_tenant:
@@ -164,7 +173,7 @@ def _twiml_connect_stream(
     rid: str,
     tenant_mode: str,
     tenant_id: str | None,
-    actor_mode: str | None,
+    ai_mode: str | None,
     from_number: str | None,
     to_number: str | None,
 ) -> str:
@@ -178,8 +187,8 @@ def _twiml_connect_stream(
     ]
     if tenant_id:
         params.append(f'<Parameter name="tenant_id" value="{_xml_escape(tenant_id)}"/>')
-    if actor_mode:
-        params.append(f'<Parameter name="actor_mode" value="{_xml_escape(actor_mode)}"/>')
+    if ai_mode:
+        params.append(f'<Parameter name="ai_mode" value="{_xml_escape(ai_mode)}"/>')
     if from_number:
         params.append(f'<Parameter name="from_number" value="{_xml_escape(from_number)}"/>')
     if to_number:
@@ -215,11 +224,14 @@ def _load_config() -> dict[str, Any]:
     if not shared_line_number:
         raise ValueError("VOZ_SHARED_LINE_NUMBER missing")
 
+    dual_mode_access = env_flag("VOZ_DUAL_MODE_ACCESS")
     access_code_map = _parse_json_env("VOZ_ACCESS_CODE_MAP_JSON")
     client_access_code_map = _parse_json_env("VOZ_CLIENT_ACCESS_CODE_MAP_JSON")
-    access_code_table = _parse_access_code_table_env("VOZ_ACCESS_CODE_TABLE_JSON")
+    access_code_routing = (
+        _parse_access_code_routing_env("VOZ_ACCESS_CODE_ROUTING_JSON") if dual_mode_access else {}
+    )
     dedicated_line_map = _parse_json_env("VOZ_DEDICATED_LINE_MAP_JSON")
-    access_code_prompt = _clean_str(os.getenv("VOZ_ACCESS_CODE_PROMPT", "")) or "Please enter your 8 digit access code."
+    access_code_prompt = _clean_str(os.getenv("VOZ_ACCESS_CODE_PROMPT", "")) or "Please enter your 8-digit access code."
 
     stream_url = _clean_str(os.getenv("VOZ_TWILIO_STREAM_URL", ""))
     if not stream_url:
@@ -229,9 +241,10 @@ def _load_config() -> dict[str, Any]:
 
     return {
         "shared_line_number": shared_line_number,
+        "dual_mode_access": dual_mode_access,
         "access_code_map": access_code_map,
         "client_access_code_map": client_access_code_map,
-        "access_code_table": access_code_table,
+        "access_code_routing": access_code_routing,
         "dedicated_line_map": dedicated_line_map,
         "stream_url": stream_url,
         "access_code_prompt": access_code_prompt,
@@ -283,13 +296,13 @@ async def twilio_voice(request: Request) -> StarletteResponse:
     # Dedicated routing
     tenant_id = dedicated_line_map.get(to_number or "")
     if tenant_id:
-        _log(rid, f"routing decision: mode=dedicated to={to_number} tenant_id={tenant_id} actor_mode=client")
+        _log(rid, f"routing decision: mode=dedicated to={to_number} tenant_id={tenant_id} ai_mode=customer")
         twiml = _twiml_connect_stream(
             stream_url=stream_url,
             rid=rid,
             tenant_mode="dedicated",
             tenant_id=tenant_id,
-            actor_mode="client",
+            ai_mode="customer",
             from_number=from_number,
             to_number=to_number,
         )
@@ -301,7 +314,7 @@ async def twilio_voice(request: Request) -> StarletteResponse:
         twiml = _twiml_say_hangup("Wrong number.")
         return Response(content=twiml, media_type="application/xml")
 
-    _log(rid, f"routing decision: mode=shared to={to_number} tenant_id=None actor_mode=None")
+    _log(rid, f"routing decision: mode=shared to={to_number} tenant_id=None ai_mode=None")
     # IMPORTANT: action URL is escaped inside _twiml_gather_access_code
     action_url = str(request.url_for("twilio_voice_access_code"))
     twiml = _twiml_gather_access_code(
@@ -343,18 +356,18 @@ async def twilio_voice_access_code(request: Request) -> StarletteResponse:
 
     resolved = _resolve_access_code(cfg, digits)
     if resolved:
-        tenant_id, actor_mode = resolved
-        _log(rid, f"access granted: tenant_id={tenant_id} actor_mode={actor_mode}")
+        tenant_id, ai_mode = resolved
+        _log(rid, f"ACCESS_CODE_ACCEPTED tenant_id={tenant_id} ai_mode={ai_mode}")
         _log(
             rid,
-            f"routing decision: mode=shared to={to_number} tenant_id={tenant_id} actor_mode={actor_mode}",
+            f"routing decision: mode=shared to={to_number} tenant_id={tenant_id} ai_mode={ai_mode}",
         )
         twiml = _twiml_connect_stream(
             stream_url=stream_url,
             rid=rid,
             tenant_mode="shared",
             tenant_id=tenant_id,
-            actor_mode=actor_mode,
+            ai_mode=ai_mode,
             from_number=from_number,
             to_number=to_number,
         )
@@ -396,12 +409,13 @@ def selftests() -> dict[str, Any]:
 
     # Enable feature for test
     os.environ["VOZ_FEATURE_SHARED_LINE_ACCESS"] = "1"
+    os.environ["VOZ_DUAL_MODE_ACCESS"] = "1"
     os.environ["VOZ_SHARED_LINE_NUMBER"] = "+15551234567"
     os.environ["VOZ_ACCESS_CODE_MAP_JSON"] = '{"12345678":"tenant_owner"}'
     os.environ["VOZ_CLIENT_ACCESS_CODE_MAP_JSON"] = '{"87654321":"tenant_client"}'
-    os.environ["VOZ_ACCESS_CODE_TABLE_JSON"] = (
-        '{"12345678":{"tenant_id":"tenant_demo","actor_mode":"owner"},'
-        '"87654321":{"tenant_id":"tenant_demo","actor_mode":"client"}}'
+    os.environ["VOZ_ACCESS_CODE_ROUTING_JSON"] = (
+        '{"12345678":{"tenant_id":"tenant_demo","ai_mode":"owner"},'
+        '"87654321":{"tenant_id":"tenant_demo","ai_mode":"customer"}}'
     )
     os.environ["VOZ_DEDICATED_LINE_MAP_JSON"] = "{}"
     os.environ["VOZ_TWILIO_STREAM_URL"] = "wss://example.com/twilio/stream"
@@ -421,7 +435,7 @@ def selftests() -> dict[str, Any]:
     # Ensure query separator is XML-escaped
     assert "&amp;" in body
 
-    # Valid OWNER access code should Connect/Stream with actor_mode=owner.
+    # Valid OWNER access code should Connect/Stream with ai_mode=owner.
     r2 = c.post(
         "/twilio/voice/access-code?attempt=0&rid=CA_TEST",
         data={
@@ -436,9 +450,9 @@ def selftests() -> dict[str, Any]:
     assert "<Connect>" in r2.text
     assert "<Stream" in r2.text
     assert "tenant_demo" in r2.text
-    assert 'name="actor_mode" value="owner"' in r2.text
+    assert 'name="ai_mode" value="owner"' in r2.text
 
-    # Valid CLIENT access code should Connect/Stream with actor_mode=client.
+    # Valid CUSTOMER access code should Connect/Stream with ai_mode=customer.
     r3 = c.post(
         "/twilio/voice/access-code?attempt=0&rid=CA_TEST",
         data={
@@ -453,7 +467,7 @@ def selftests() -> dict[str, Any]:
     assert "<Connect>" in r3.text
     assert "<Stream" in r3.text
     assert "tenant_demo" in r3.text
-    assert 'name="actor_mode" value="client"' in r3.text
+    assert 'name="ai_mode" value="customer"' in r3.text
 
     # Invalid code should retry and eventually hang up.
     r4 = c.post(

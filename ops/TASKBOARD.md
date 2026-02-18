@@ -15,18 +15,23 @@
       - Evidence signatures:
         - `OPENAI_AUDIO_DELTA_FIRST ...`
         - `TWILIO_MAIN_FRAME_SENT first=1 ...`
+- [x] Flow A OpenAI Realtime bridge: audio deltas received + Twilio μ-law frames sent + caller hears speech
 - [x] Flow A Realtime session update accepted + transcript-driven response loop working
       - `session.created/session.updated` accepted
       - `speech_started` → `transcript.completed` → `response.create` → `response.created/done`
 
 ## NOW (next high-leverage work)
-- [ ] TASK-0203 — Dual-mode access gating (client vs owner) on the shared number
+- [ ] TASK-0203 — Dual-mode access gating (`ai_mode=customer|owner`) on the shared number
       - Generic prompt: “enter your 8-digit access code”
-      - Access code resolves `{tenant_id, actor_mode}`
-      - Pass `actor_mode` through Twilio Stream customParameters
+      - Access code resolves `{tenant_id, ai_mode}`
+      - Pass `ai_mode` through Twilio Stream customParameters
 - [ ] TASK-0204 — Mode policy enforcement (MVP env-only)
-      - Mode-specific instructions by `(tenant_id, actor_mode)`
-      - Mode-aware feature/skill allowlists (fail closed)
+      - Mode-specific instructions by `(tenant_id, ai_mode)`
+      - Mode-aware feature/skill allowlists via `VOZ_FEATURE_<NAME>_AI_MODES` (fail closed)
+- [ ] TASK-0204.1 — Back-compat and routing config for access-code mode selection
+      - Preferred `VOZ_ACCESS_CODE_ROUTING_JSON` for code -> `{tenant_id, ai_mode}`
+      - Keep `VOZ_ACCESS_CODE_MAP_JSON` as legacy owner map
+      - Optional `VOZ_CLIENT_ACCESS_CODE_MAP_JSON` for customer codes
 - [ ] Flow A: refine barge-in / clear semantics (anti-regression)
       - Ensure `TWILIO_CLEAR_SENT` only on actual `speech_started`
       - Add debounce/guards so we don’t flush model audio unnecessarily

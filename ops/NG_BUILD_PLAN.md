@@ -56,47 +56,47 @@ Blocked by core DB/event store scaffold (Core Maintainer batch):
 
 ---
 
-## 3) Tenant interaction modes (client vs business owner)
+## 3) Dual AI Modes (Customer vs Owner) — Selected by Access Code
 
 ### Why this is mandatory
-Each tenant/customer must support **two modes** with different behavior and permissions:
+Each tenant/customer must support **two AI modes** with different behavior and permissions:
 
-1) **Client-facing mode** (customer/caller)
+1) **Customer-facing mode** (`ai_mode=customer`)
 - Business greeting + customer protocol
 - Customer-facing skills (order placing, appointment requests, FAQs)
 - Strictly **no business analytics** / owner-only operations
 
-2) **Business-owner mode**
+2) **Owner-facing mode** (`ai_mode=owner`)
 - Owner-facing greeting + owner protocol
 - Business analytics / “ask anything about my business” (DB-derived, auditable)
 - Administrative controls (future: hours, routing toggles, notification policies)
 
 ### Canonical names
-- `actor_mode`: `"client"` | `"owner"` (this is the mode enforced by policy)
+- `ai_mode`: `"customer"` | `"owner"` (this is the mode enforced by policy)
 - `tenant_mode`: `"shared"` | `"dedicated"` (this is the line routing mode)
 
 ### Access gate requirements (shared number)
 The shared number access gate must:
 - Prompt generically (no “business access code” wording):
   - “Please enter your 8-digit access code.”
-- Resolve access code → `{tenant_id, actor_mode}`
+- Resolve access code → `{tenant_id, ai_mode}`
 - Start the Twilio Media Stream with **both**:
   - `tenant_id=<tenant>`
-  - `actor_mode=<client|owner>`
+  - `ai_mode=<customer|owner>`
   - (plus existing `tenant_mode=shared` and `rid=<CallSid>`)
 
 #### Configuration surface (MVP via env vars)
-Preferred single-table config:
-- `VOZ_ACCESS_CODE_TABLE_JSON` (JSON map)
-  - `{ "12345678": {"tenant_id":"tenant_demo","actor_mode":"owner"}, "87654321":{"tenant_id":"tenant_demo","actor_mode":"client"} }`
+Preferred:
+- `VOZ_ACCESS_CODE_ROUTING_JSON` (JSON map code -> route object)
+  - `{ "12345678": {"tenant_id":"tenant_demo","ai_mode":"owner"}, "87654321":{"tenant_id":"tenant_demo","ai_mode":"customer"} }`
 
-Back-compat option (while migrating):
-- `VOZ_ACCESS_CODE_MAP_JSON` (existing) treated as `"owner"` codes
-- `VOZ_CLIENT_ACCESS_CODE_MAP_JSON` (new) treated as `"client"` codes
+Back-compat:
+- `VOZ_ACCESS_CODE_MAP_JSON` (legacy) treated as `"owner"` codes
+- `VOZ_CLIENT_ACCESS_CODE_MAP_JSON` (optional) treated as `"customer"` codes
 - Access gate merges both maps into a single resolver (conflicts fail closed).
 
 ### Mode-aware protocol selection (MVP)
-At minimum, Flow A must select **instructions/persona** by `(tenant_id, actor_mode)` without heavy work in the audio loop.
+At minimum, Flow A must select **instructions/persona** by `(tenant_id, ai_mode)` without heavy work in the audio loop.
 
 Recommended env config:
 - `VOZ_TENANT_MODE_POLICY_JSON` (JSON)
@@ -107,7 +107,7 @@ Recommended env config:
     - `skill_allowlist` or `skill_blocklist` (optional; enforced by router later)
 
 Safe defaults:
-- If `actor_mode` is missing/unknown: treat as `"client"` and deny owner-only operations.
+- If `ai_mode` is missing/unknown: treat as `"customer"` and deny owner-only operations.
 - If a policy entry is missing: fall back to tenant defaults and keep conservative capabilities.
 
 ### Mode-aware feature/skill gating (MVP and beyond)
@@ -116,13 +116,13 @@ Safe defaults:
 
 Practical MVP knobs (env-only; no DB required):
 - Per-feature modes:
-  - `VOZ_FEATURE_<NAME>_MODES="client,owner"` (default both unless explicitly restricted)
+  - `VOZ_FEATURE_<NAME>_AI_MODES="customer,owner"` (default both unless explicitly restricted)
 - (Optional) per-tenant override:
   - `VOZ_TENANT_FEATURE_MODES_JSON` for tenant-specific exceptions
 
 Enforcement points (in order of priority):
-1) **Access gate** sets `actor_mode` deterministically.
-2) **Voice Flow A** applies mode-specific instructions and blocks owner-only intents when in client mode.
+1) **Access gate** sets `ai_mode` deterministically.
+2) **Voice Flow A** applies mode-specific instructions and blocks owner-only intents when in customer mode.
 3) **Skill router (future)** enforces allowlists before executing any skill.
 
 Examples:
@@ -150,7 +150,7 @@ Examples:
   - g711_ulaw in/out
   - server_vad; interrupt_response true
 - Deterministic routing decisions based on call metadata:
-  - `tenant_id`, `tenant_mode`, `actor_mode`, `rid`
+  - `tenant_id`, `tenant_mode`, `ai_mode`, `rid`
 
 ### Known Realtime compatibility gotcha (must remember)
 Some OpenAI Realtime servers/models reject `response.modalities=['audio']` and only support:
@@ -238,14 +238,14 @@ Rule:
 
 Create tasks under `.agents/tasks/` (one task = one file change set):
 
-1) TASK-0203: Dual-mode access codes (client vs owner) in shared line access gate
+1) TASK-0203: Dual-mode access codes (customer vs owner) in shared line access gate
    - Generic prompt
-   - Code resolver returns `{tenant_id, actor_mode}`
-   - Stream customParameters include actor_mode
+   - Code resolver returns `{tenant_id, ai_mode}`
+   - Stream customParameters include ai_mode
 
 2) TASK-0204: Mode policy enforcement (MVP env-only)
-   - Mode-specific instructions by `(tenant_id, actor_mode)`
-   - Per-feature modes: `VOZ_FEATURE_<NAME>_MODES`
+   - Mode-specific instructions by `(tenant_id, ai_mode)`
+   - Per-feature modes: `VOZ_FEATURE_<NAME>_AI_MODES`
    - Fail-closed on unknown modes
 
 3) TASK-0205: Owner-mode analytics foundations (blocked by DB/event store readiness)
