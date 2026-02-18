@@ -10,11 +10,12 @@ Feature flags:
   - VOZLIA_DEBUG
 Failure mode:
   - If OpenAI bridge fails, Twilio stream stays connected but no assistant audio is produced.
-Last touched: 2026-02-18 (force response.create audio-only; add first-delta breadcrumbs + audio-part fallback)
+Last touched: 2026-02-18 (response.create must request supported modalities; add first-delta breadcrumbs)
 """
 
 # CHANGELOG (recent)
-# - 2026-02-18: Request audio-only output in response.create; add first-delta logs; add audio-part fallback ingest.
+# - 2026-02-18: response.create requests modalities=['audio','text'] (per server-supported combos);
+#              store/log session output_modalities; keep first-delta breadcrumbs.
 
 from __future__ import annotations
 
@@ -117,7 +118,7 @@ def _build_openai_session_update(*, voice: str, instructions: str | None) -> dic
     So we do NOT send `session.type`.
 
     We do send:
-      - modalities: ["audio", "text"] (legacy compatibility; per-response create requests audio-only, since a Response can only output one modality at a time and audio includes transcript)
+      - modalities: ["audio", "text"]
       - top-level voice + g711_ulaw input/output audio formats
       - server_vad with create_response disabled (legacy control loop)
       - input audio transcription enabled
@@ -191,8 +192,23 @@ async def _twilio_sender_loop(
             continue
 
         frame: bytes | None = None
+        lane = "none"
         if buffers.main:
             frame = buffers.main.popleft()
+            lane = "main"
+        elif wait_ctl.aux_enabled and buffers.aux:
+            frame = buffers.aux.popleft()
+            lane = "aux"
+        else:
+            await asyncio.sleep(0.01)
+            continue
+
+        # Send immediately, then sleep to pace.
+        msg = _build_twilio_media_msg(sid, frame)
+        async with send_lock:
+            await websocket.send_text(json.dumps(msg))
+
+        if lane == "main":
             rid = response_state.get("active_response_id")
             if isinstance(rid, str):
                 logged_main_ids = response_state.get("logged_twilio_main_frame_ids")
@@ -201,19 +217,8 @@ async def _twilio_sender_loop(
                         f"TWILIO_MAIN_FRAME_SENT first=1 response_id={rid} bytes={len(frame)} q_main={len(buffers.main)}"
                     )
                     logged_main_ids.add(rid)
-            await asyncio.sleep(FRAME_SLEEP_S)
-        elif wait_ctl.aux_enabled and buffers.aux:
-            frame = buffers.aux.popleft()
-            await asyncio.sleep(FRAME_SLEEP_S)
-        else:
-            await asyncio.sleep(0.01)
 
-        if frame is None:
-            continue
-
-        msg = _build_twilio_media_msg(sid, frame)
-        async with send_lock:
-            await websocket.send_text(json.dumps(msg))
+        await asyncio.sleep(FRAME_SLEEP_S)
 
 
 @router.websocket("/twilio/stream")
@@ -246,6 +251,8 @@ async def twilio_stream(websocket: WebSocket) -> None:
     openai_input_blocked_unknown_param = False
     logged_session_created = False
     logged_session_updated = False
+    openai_output_modalities: list[str] | None = None
+
     active_response_id: str | None = None
     response_state: dict[str, Any] = {
         "active_response_id": None,
@@ -253,7 +260,9 @@ async def twilio_stream(websocket: WebSocket) -> None:
         "logged_text_delta_ids": set(),
         "seen_audio_ids": set(),
         "logged_twilio_main_frame_ids": set(),
+        "logged_done_no_audio_ids": set(),
     }
+
     turn_seq = 0
     turn_logged_speech_started = False
     turn_logged_transcript = False
@@ -280,33 +289,45 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 continue
             await openai_ws.send(json.dumps({"type": "input_audio_buffer.append", "audio": audio_b64}))
 
+    def _normalize_modalities(x: Any) -> list[str] | None:
+        if not isinstance(x, list) or not x:
+            return None
+        out: list[str] = []
+        for v in x:
+            if isinstance(v, str) and v:
+                out.append(v)
+        return out or None
+
     async def _openai_to_twilio_loop() -> None:
         nonlocal logged_session_created, logged_session_updated, openai_input_blocked_unknown_param
-        nonlocal active_response_id
-        nonlocal turn_seq
-        nonlocal turn_logged_speech_started, turn_logged_transcript
-        nonlocal turn_logged_response_create
+        nonlocal active_response_id, openai_output_modalities
+        nonlocal turn_seq, turn_logged_speech_started, turn_logged_transcript, turn_logged_response_create
+
         while True:
             raw = await openai_ws.recv()
             evt = json.loads(raw)
             etype = evt.get("type")
 
             if etype == "session.created":
+                session = evt.get("session") if isinstance(evt.get("session"), dict) else {}
+                om = session.get("output_modalities") or session.get("modalities")
+                openai_output_modalities = _normalize_modalities(om) or openai_output_modalities
                 if not logged_session_created:
-                    session = evt.get("session") if isinstance(evt.get("session"), dict) else {}
                     _dbg(
                         f"OPENAI_SESSION_CREATED keys={list(session.keys())} "
-                        f"output_modalities={session.get('output_modalities') or session.get('modalities')}"
+                        f"output_modalities={openai_output_modalities}"
                     )
                     logged_session_created = True
                 continue
 
             if etype == "session.updated":
+                session = evt.get("session") if isinstance(evt.get("session"), dict) else {}
+                om = session.get("output_modalities") or session.get("modalities")
+                openai_output_modalities = _normalize_modalities(om) or openai_output_modalities
                 if not logged_session_updated:
-                    session = evt.get("session") if isinstance(evt.get("session"), dict) else {}
                     _dbg(
                         f"OPENAI_SESSION_UPDATED keys={list(session.keys())} "
-                        f"output_modalities={session.get('output_modalities') or session.get('modalities')}"
+                        f"output_modalities={openai_output_modalities}"
                     )
                     logged_session_updated = True
                 continue
@@ -314,8 +335,17 @@ async def twilio_stream(websocket: WebSocket) -> None:
             if etype == "error":
                 err = evt.get("error")
                 code = err.get("code") if isinstance(err, dict) else None
+                param = err.get("param") if isinstance(err, dict) else None
+                msg = err.get("message") if isinstance(err, dict) else None
+
                 if code == "unknown_parameter":
                     openai_input_blocked_unknown_param = True
+
+                # If server rejects modalities, force the known-supported audio+text combo.
+                if code == "invalid_value" and param == "response.modalities":
+                    openai_output_modalities = ["audio", "text"]
+                    _dbg(f"OPENAI_MODALITIES_FORCED output_modalities={openai_output_modalities} msg={msg!r}")
+
                 if code != "response_cancel_not_active":
                     _dbg(f"OPENAI_ERROR evt={evt!r}")
                 continue
@@ -325,15 +355,19 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 turn_logged_speech_started = False
                 turn_logged_transcript = False
                 turn_logged_response_create = False
+
                 buffers.main.clear()
                 wait_ctl.on_user_speech_started(buffers=buffers)
+
                 sid = stream_sid_ref.get("streamSid")
                 if sid:
                     async with send_lock:
                         await websocket.send_text(json.dumps(_build_twilio_clear_msg(sid)))
                     _dbg("TWILIO_CLEAR_SENT")
+
                 if active_response_id:
                     await openai_ws.send(json.dumps({"type": "response.cancel"}))
+
                 if not turn_logged_speech_started:
                     _dbg(f"OPENAI_SPEECH_STARTED turn={turn_seq}")
                     turn_logged_speech_started = True
@@ -343,14 +377,21 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 transcript = (evt.get("transcript") or "").strip()
                 if not transcript:
                     continue
+
                 if not turn_logged_transcript:
                     _dbg(f"OPENAI_TRANSCRIPT completed len={len(transcript)} turn={turn_seq}")
                     turn_logged_transcript = True
+
                 if active_response_id is not None:
                     continue
-                await openai_ws.send(json.dumps({"type": "response.create", "response": {"modalities": ["audio"]}}))
+
+                # IMPORTANT: Your server reports supported combinations: ['text'] and ['audio','text'].
+                # Request audio+text explicitly so output_audio events are enabled.
+                modalities = openai_output_modalities or ["audio", "text"]
+                await openai_ws.send(json.dumps({"type": "response.create", "response": {"modalities": modalities}}))
+
                 if not turn_logged_response_create:
-                    _dbg(f"OPENAI_RESPONSE_CREATE_SENT rid={turn_seq} modalities=['audio']")
+                    _dbg(f"OPENAI_RESPONSE_CREATE_SENT rid={turn_seq} modalities={modalities!r}")
                     turn_logged_response_create = True
                 continue
 
@@ -441,7 +482,21 @@ async def twilio_stream(websocket: WebSocket) -> None:
             if etype == "response.done":
                 response = evt.get("response") if isinstance(evt.get("response"), dict) else {}
                 rid = response.get("id")
-                _dbg(f"OPENAI_RESPONSE_DONE id={rid} output_modalities={response.get('output_modalities')}")
+                out_mods = response.get("output_modalities")
+                _dbg(f"OPENAI_RESPONSE_DONE id={rid} output_modalities={out_mods}")
+
+                if isinstance(rid, str) and rid:
+                    seen_audio_ids = response_state.get("seen_audio_ids")
+                    done_no_audio_ids = response_state.get("logged_done_no_audio_ids")
+                    if (
+                        isinstance(seen_audio_ids, set)
+                        and isinstance(done_no_audio_ids, set)
+                        and rid not in seen_audio_ids
+                        and rid not in done_no_audio_ids
+                    ):
+                        _dbg(f"OPENAI_RESPONSE_DONE_NO_AUDIO id={rid} output_modalities={out_mods}")
+                        done_no_audio_ids.add(rid)
+
                 if isinstance(rid, str) and rid and rid == active_response_id:
                     active_response_id = None
                     response_state["active_response_id"] = None
