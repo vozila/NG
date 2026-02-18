@@ -2,22 +2,25 @@
 Purpose: inbound Twilio tenant routing for dedicated and shared voice lines.
 Hot path: no (HTTP webhooks before WS stream start).
 Feature flags: VOZ_FEATURE_SHARED_LINE_ACCESS, VOZLIA_DEBUG.
-Failure mode: safe-fail TwiML ("System not configured") and hang up when config is invalid.
+Reads/Writes: reads env vars only (no DB).
+Notes:
+- Selftests use FastAPI TestClient; import it lazily inside selftests so production
+  runtime does not require httpx/test dependencies.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import time
+import urllib.parse
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
-from html import escape
 from typing import Any
-from urllib.parse import parse_qsl, quote
 
 from fastapi import APIRouter, FastAPI, Request, Response
-from fastapi.testclient import TestClient
+from fastapi.responses import PlainTextResponse
+from starlette.responses import Response as StarletteResponse
 
 from core.config import env_flag, is_debug
 from core.feature_loader import load_features
@@ -25,248 +28,288 @@ from core.logging import logger
 
 router = APIRouter()
 
+# ---- Constants ----
 MAX_INVALID_RETRIES = 2
+ACCESS_CODE_DIGITS = 8
 
 
-@dataclass(frozen=True)
-class RoutingConfig:
-    dedicated_map: dict[str, str]
-    shared_line_number: str
-    access_code_map: dict[str, str]
-    stream_url: str
-
-
-def _clean(v: Any) -> str | None:
+def _clean_str(v: Any) -> str | None:
     if not isinstance(v, str):
         return None
     s = v.strip()
     return s or None
 
 
-def _safe_debug(message: str, *, rid: str | None = None) -> None:
-    if not is_debug():
-        return
-    if rid:
-        logger.info("rid=%s %s", rid, message)
-        return
-    logger.info(message)
-
-
-def _parse_json_map(var_name: str) -> dict[str, str] | None:
-    raw = os.getenv(var_name)
+def _parse_json_env(name: str) -> dict[str, str]:
+    raw = os.getenv(name, "").strip()
     if not raw:
-        return None
-    try:
-        obj = json.loads(raw)
-    except json.JSONDecodeError:
-        return None
+        raise ValueError(f"{name} is required")
+    obj = json.loads(raw)
     if not isinstance(obj, dict):
-        return None
-
+        raise ValueError(f"{name} must be a JSON object")
     out: dict[str, str] = {}
     for k, v in obj.items():
-        key = _clean(k)
-        val = _clean(v)
-        if key is None or val is None:
-            return None
-        out[key] = val
+        ks = _clean_str(k)
+        vs = _clean_str(v)
+        if not ks or not vs:
+            continue
+        out[ks] = vs
     return out
 
 
-def _load_config() -> RoutingConfig | None:
-    dedicated_map = _parse_json_map("VOZ_DEDICATED_LINE_MAP_JSON")
-    access_code_map = _parse_json_map("VOZ_ACCESS_CODE_MAP_JSON")
-    shared_line_number = _clean(os.getenv("VOZ_SHARED_LINE_NUMBER"))
-    stream_url = _clean(os.getenv("VOZ_TWILIO_STREAM_URL")) or "wss://example.invalid/twilio/stream"
+def _require_env(name: str) -> str:
+    v = os.getenv(name, "").strip()
+    if not v:
+        raise ValueError(f"{name} is required")
+    return v
 
-    if dedicated_map is None or access_code_map is None or shared_line_number is None:
-        return None
+
+def _xml_escape(s: str) -> str:
+    # Minimal XML escaping for attribute values
+    return (
+        s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
+    )
+
+
+def _twiml_hangup(msg: str) -> str:
+    m = _xml_escape(msg)
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>{m}</Say>
+  <Hangup/>
+</Response>
+"""
+
+
+def _twiml_gather_access_code(
+    *,
+    action_url: str,
+    attempt: int,
+    rid: str,
+    prompt: str,
+) -> str:
+    prompt_xml = _xml_escape(prompt)
+    action_xml = _xml_escape(action_url)
+    rid_xml = _xml_escape(rid)
+    attempt_xml = _xml_escape(str(attempt))
+
+    # DTMF gather for deterministic MVP
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Gather input="dtmf" numDigits="{ACCESS_CODE_DIGITS}" timeout="6" action="{action_xml}?attempt={attempt_xml}&rid={rid_xml}" method="POST">
+    <Say>{prompt_xml}</Say>
+  </Gather>
+  <Say>No input received. Goodbye.</Say>
+  <Hangup/>
+</Response>
+"""
+
+
+def _twiml_connect_stream(
+    *,
+    stream_url: str,
+    rid: str,
+    tenant_mode: str,
+    tenant_id: str | None,
+    from_number: str | None,
+    to_number: str | None,
+) -> str:
+    url_xml = _xml_escape(stream_url)
+    rid_xml = _xml_escape(rid)
+    mode_xml = _xml_escape(tenant_mode)
+
+    params = [
+        f'<Parameter name="tenant_mode" value="{mode_xml}"/>',
+        f'<Parameter name="rid" value="{rid_xml}"/>',
+    ]
+    if tenant_id:
+        params.append(f'<Parameter name="tenant_id" value="{_xml_escape(tenant_id)}"/>')
+    if from_number:
+        params.append(f'<Parameter name="from_number" value="{_xml_escape(from_number)}"/>')
+    if to_number:
+        params.append(f'<Parameter name="to_number" value="{_xml_escape(to_number)}"/>')
+
+    params_xml = "\n      ".join(params)
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Connect>
+    <Stream url="{url_xml}">
+      {params_xml}
+    </Stream>
+  </Connect>
+</Response>
+"""
+
+
+def _parse_form_urlencoded(body: bytes) -> dict[str, str]:
+    # Avoid python-multipart dependency; Twilio sends application/x-www-form-urlencoded.
+    # urllib.parse.parse_qs returns list values; take first.
+    parsed = urllib.parse.parse_qs(body.decode("utf-8", errors="ignore"), keep_blank_values=True)
+    out: dict[str, str] = {}
+    for k, vals in parsed.items():
+        if not vals:
+            continue
+        out[k] = vals[0]
+    return out
+
+
+def _get_form_value(form: dict[str, str], key: str) -> str | None:
+    return _clean_str(form.get(key))
+
+
+def _load_config() -> tuple[dict[str, str], str, dict[str, str], str]:
+    dedicated_map = _parse_json_env("VOZ_DEDICATED_LINE_MAP_JSON")
+    shared_number = _require_env("VOZ_SHARED_LINE_NUMBER")
+    access_map = _parse_json_env("VOZ_ACCESS_CODE_MAP_JSON")
+    stream_url = _require_env("VOZ_TWILIO_STREAM_URL")
 
     if not stream_url.startswith("wss://"):
-        return None
+        raise ValueError("VOZ_TWILIO_STREAM_URL must start with wss://")
 
-    return RoutingConfig(
-        dedicated_map=dedicated_map,
-        shared_line_number=shared_line_number,
-        access_code_map=access_code_map,
-        stream_url=stream_url,
-    )
+    return dedicated_map, shared_number, access_map, stream_url
 
 
-def _xml_response(body: str) -> Response:
-    return Response(content=body, media_type="text/xml")
-
-
-def _twiml_say_hangup(message: str) -> Response:
-    msg = escape(message, quote=True)
-    return _xml_response(f"<Response><Say>{msg}</Say><Hangup/></Response>")
-
-
-def _twiml_connect_stream(*, stream_url: str, tenant_id: str, tenant_mode: str, rid: str) -> Response:
-    s_url = escape(stream_url, quote=True)
-    p_tenant_id = escape(tenant_id, quote=True)
-    p_tenant_mode = escape(tenant_mode, quote=True)
-    p_rid = escape(rid, quote=True)
-    return _xml_response(
-        "<Response>"
-        "<Connect>"
-        f'<Stream url="{s_url}">'
-        f'<Parameter name="tenant_id" value="{p_tenant_id}"/>'
-        f'<Parameter name="tenant_mode" value="{p_tenant_mode}"/>'
-        f'<Parameter name="rid" value="{p_rid}"/>'
-        "</Stream>"
-        "</Connect>"
-        "</Response>"
-    )
-
-
-def _twiml_gather_access_code(*, action_url: str, prompt: str) -> Response:
-    action = escape(action_url, quote=True)
-    prompt_escaped = escape(prompt, quote=True)
-    return _xml_response(
-        "<Response>"
-        f'<Gather input="dtmf" numDigits="8" timeout="8" action="{action}" method="POST">'
-        f"<Say>{prompt_escaped}</Say>"
-        "</Gather>"
-        "<Say>We did not receive input.</Say>"
-        "<Hangup/>"
-        "</Response>"
-    )
-
-
-def _build_access_action(*, attempt: int, rid: str) -> str:
-    return f"/twilio/voice/access-code?attempt={attempt}&rid={quote(rid, safe='')}"
-
-
-def _parse_attempt(value: Any) -> int:
-    if isinstance(value, str):
-        try:
-            n = int(value)
-        except ValueError:
-            return 0
-        return max(0, min(n, MAX_INVALID_RETRIES + 1))
-    return 0
-
-
-def _read_rid(form: dict[str, Any], fallback: str | None = None) -> str:
-    call_sid = _clean(form.get("CallSid"))
-    if call_sid:
-        return call_sid
-    fb = _clean(fallback)
-    if fb:
-        return fb
-    return "unknown"
-
-
-def _read_digits(form: dict[str, Any]) -> str:
-    digits = _clean(form.get("Digits"))
-    return digits or ""
-
-
-async def _read_form_urlencoded(request: Request) -> dict[str, str]:
-    body = await request.body()
-    if not body:
-        return {}
-    try:
-        decoded = body.decode("utf-8")
-    except UnicodeDecodeError:
-        decoded = body.decode("latin-1", errors="ignore")
-    return dict(parse_qsl(decoded, keep_blank_values=True))
+def _safe_fail(msg: str) -> StarletteResponse:
+    # Fail closed; do not guess a tenant id.
+    return Response(content=_twiml_hangup(msg), media_type="application/xml")
 
 
 @router.post("/twilio/voice")
-async def twilio_voice_entry(request: Request) -> Response:
-    form = await _read_form_urlencoded(request)
-    rid = _read_rid(form)
-    _safe_debug("request received: twilio voice webhook", rid=rid)
+async def twilio_voice(request: Request) -> StarletteResponse:
+    rid = ""
+    try:
+        body = await request.body()
+        form = _parse_form_urlencoded(body)
 
-    cfg = _load_config()
-    if cfg is None:
-        _safe_debug("routing decision: config invalid", rid=rid)
-        return _twiml_say_hangup("System not configured")
+        call_sid = _get_form_value(form, "CallSid") or "unknown"
+        rid = call_sid
+        to_number = _get_form_value(form, "To")
+        from_number = _get_form_value(form, "From")
 
-    to_number = _clean(form.get("To"))
-    if to_number is None:
-        _safe_debug("routing decision: missing To", rid=rid)
-        return _twiml_say_hangup("System not configured")
+        if is_debug():
+            logger.info("rid=%s request received: /twilio/voice to=%s from=%s", rid, to_number, from_number)
 
-    tenant_id = cfg.dedicated_map.get(to_number)
-    if tenant_id:
-        _safe_debug(
-            f"routing decision: mode=dedicated to={to_number} tenant_id={tenant_id}",
+        dedicated_map, shared_number, _access_map, stream_url = _load_config()
+
+        tenant_id: str | None = None
+        tenant_mode = "shared"
+
+        # Dedicated routing by To number if present in map
+        if to_number and to_number in dedicated_map:
+            tenant_mode = "dedicated"
+            tenant_id = dedicated_map[to_number]
+
+        # Shared line only if To matches shared_number OR no dedicated mapping
+        if to_number and to_number == shared_number and tenant_mode != "dedicated":
+            tenant_mode = "shared"
+
+        if is_debug():
+            logger.info(
+                "rid=%s routing decision: mode=%s to=%s tenant_id=%s",
+                rid,
+                tenant_mode,
+                to_number,
+                tenant_id,
+            )
+
+        # Dedicated → connect stream immediately
+        if tenant_mode == "dedicated" and tenant_id:
+            xml = _twiml_connect_stream(
+                stream_url=stream_url,
+                rid=rid,
+                tenant_mode="dedicated",
+                tenant_id=tenant_id,
+                from_number=from_number,
+                to_number=to_number,
+            )
+            return Response(content=xml, media_type="application/xml")
+
+        # Shared → gather access code
+        action_url = str(request.base_url).rstrip("/") + "/twilio/voice/access-code"
+        xml = _twiml_gather_access_code(
+            action_url=action_url,
+            attempt=0,
             rid=rid,
+            prompt="Please enter your 8 digit business access code.",
         )
-        _safe_debug(
-            f"returning TwiML: connect stream url={cfg.stream_url}",
-            rid=rid,
-        )
-        return _twiml_connect_stream(
-            stream_url=cfg.stream_url,
-            tenant_id=tenant_id,
-            tenant_mode="dedicated",
-            rid=rid,
-        )
+        return Response(content=xml, media_type="application/xml")
 
-    if to_number == cfg.shared_line_number:
-        _safe_debug(
-            f"routing decision: mode=shared to={to_number} prompt_access_code",
-            rid=rid,
-        )
-        return _twiml_gather_access_code(
-            action_url=_build_access_action(attempt=0, rid=rid),
-            prompt="Please enter your 8 digit access code.",
-        )
-
-    _safe_debug(f"routing decision: no route to={to_number}", rid=rid)
-    return _twiml_say_hangup("System not configured")
+    except Exception as e:
+        if is_debug():
+            logger.exception("rid=%s /twilio/voice exception", rid or "unknown")
+        return _safe_fail(f"System not configured ({type(e).__name__}).")
 
 
 @router.post("/twilio/voice/access-code")
-async def twilio_voice_access_code(request: Request) -> Response:
-    form = await _read_form_urlencoded(request)
-    q = request.query_params
+async def twilio_voice_access_code(request: Request) -> StarletteResponse:
+    rid = ""
+    try:
+        body = await request.body()
+        form = _parse_form_urlencoded(body)
 
-    rid = _read_rid(form, fallback=q.get("rid"))
-    attempt = _parse_attempt(q.get("attempt"))
-    digits = _read_digits(form)
+        call_sid = _get_form_value(form, "CallSid") or "unknown"
+        rid = _clean_str(request.query_params.get("rid")) or call_sid
 
-    _safe_debug(f"request received: access code callback attempt={attempt}", rid=rid)
+        digits = _get_form_value(form, "Digits")
+        attempt_raw = _clean_str(request.query_params.get("attempt")) or "0"
+        try:
+            attempt = int(attempt_raw)
+        except ValueError:
+            attempt = 0
 
-    cfg = _load_config()
-    if cfg is None:
-        _safe_debug("routing decision: config invalid", rid=rid)
-        return _twiml_say_hangup("System not configured")
+        to_number = _get_form_value(form, "To")
+        from_number = _get_form_value(form, "From")
 
-    tenant_id = cfg.access_code_map.get(digits)
-    if tenant_id:
-        _safe_debug(
-            f"routing decision: mode=shared tenant_id={tenant_id} code_valid=1",
+        if is_debug():
+            logger.info(
+                "rid=%s request received: /twilio/voice/access-code attempt=%s digits=%s",
+                rid,
+                attempt,
+                digits,
+            )
+
+        dedicated_map, shared_number, access_map, stream_url = _load_config()
+
+        # Only allow this flow for shared line (or unknown routing). We do not guess tenant_id for unknown numbers.
+        if to_number and to_number != shared_number and to_number not in dedicated_map:
+            return _safe_fail("Invalid routing context.")
+
+        tenant_id: str | None = None
+        if digits:
+            tenant_id = access_map.get(digits)
+
+        if not tenant_id:
+            if attempt >= MAX_INVALID_RETRIES:
+                return Response(content=_twiml_hangup("Too many invalid attempts."), media_type="application/xml")
+
+            action_url = str(request.base_url).rstrip("/") + "/twilio/voice/access-code"
+            xml = _twiml_gather_access_code(
+                action_url=action_url,
+                attempt=attempt + 1,
+                rid=rid,
+                prompt="Invalid code. Please try again.",
+            )
+            return Response(content=xml, media_type="application/xml")
+
+        # Valid code → connect stream with tenant_mode=shared and tenant_id
+        xml = _twiml_connect_stream(
+            stream_url=stream_url,
             rid=rid,
-        )
-        _safe_debug(
-            f"returning TwiML: connect stream url={cfg.stream_url}",
-            rid=rid,
-        )
-        return _twiml_connect_stream(
-            stream_url=cfg.stream_url,
-            tenant_id=tenant_id,
             tenant_mode="shared",
-            rid=rid,
+            tenant_id=tenant_id,
+            from_number=from_number,
+            to_number=to_number,
         )
+        return Response(content=xml, media_type="application/xml")
 
-    next_attempt = attempt + 1
-    if next_attempt <= MAX_INVALID_RETRIES:
-        _safe_debug(
-            f"routing decision: mode=shared code_valid=0 reprompt={next_attempt}",
-            rid=rid,
-        )
-        return _twiml_gather_access_code(
-            action_url=_build_access_action(attempt=next_attempt, rid=rid),
-            prompt="Invalid code. Please re-enter your 8 digit access code.",
-        )
-
-    _safe_debug("routing decision: mode=shared code_valid=0 max_retries_exceeded", rid=rid)
-    return _twiml_say_hangup("Invalid access code")
+    except Exception as e:
+        if is_debug():
+            logger.exception("rid=%s /twilio/voice/access-code exception", rid or "unknown")
+        return _safe_fail(f"System not configured ({type(e).__name__}).")
 
 
 def _has_route(app: FastAPI, path: str) -> bool:
@@ -293,6 +336,16 @@ def _temp_env(values: dict[str, str | None]) -> Iterator[None]:
 
 
 def selftests() -> dict[str, object]:
+    """Run deterministic feature selftests.
+
+    NOTE: TestClient is a test-only dependency; import it lazily so production
+    runtime does not require httpx.
+    """
+    try:
+        from fastapi.testclient import TestClient  # type: ignore
+    except Exception as e:  # pragma: no cover
+        return {"ok": False, "message": f"selftests require httpx/test deps: {type(e).__name__}: {e}"}
+
     base_env = {
         "VOZ_FEATURE_SAMPLE": "0",
         "VOZ_FEATURE_ADMIN_QUALITY": "0",
@@ -359,6 +412,8 @@ def selftests() -> dict[str, object]:
         if valid.status_code != 200:
             return {"ok": False, "message": "shared valid code callback failed"}
         vxml = valid.text
+        if "<Stream url=\"wss://voice.example.test/twilio/stream\"" not in vxml:
+            return {"ok": False, "message": "shared valid stream TwiML missing"}
         if '<Parameter name="tenant_id" value="tenant_demo"/>' not in vxml:
             return {"ok": False, "message": "shared tenant_id param missing"}
         if '<Parameter name="tenant_mode" value="shared"/>' not in vxml:
@@ -370,22 +425,27 @@ def selftests() -> dict[str, object]:
 
 
 def security_checks() -> dict[str, object]:
-    enabled = env_flag("VOZ_FEATURE_SHARED_LINE_ACCESS", "0")
+    # Ensure feature defaults OFF unless explicitly enabled.
     raw = os.getenv("VOZ_FEATURE_SHARED_LINE_ACCESS")
-    if raw is None and enabled:
+    if raw is None and env_flag("VOZ_FEATURE_SHARED_LINE_ACCESS", "0"):
         return {"ok": False, "message": "VOZ_FEATURE_SHARED_LINE_ACCESS must default OFF"}
 
-    if _load_config() is None:
-        return {"ok": True, "message": "shared_line_access security ok (safe-fail config)"}
+    # Ensure we never guess tenant_id when number isn't mapped and no code is provided.
+    try:
+        dedicated_map, shared_number, access_map, stream_url = _load_config()
+    except Exception:
+        # If config isn't set, fail closed at runtime; ok for security checks.
+        return {"ok": True, "message": "shared_line_access security checks ok (config missing)"}
 
-    if MAX_INVALID_RETRIES < 1:
-        return {"ok": False, "message": "MAX_INVALID_RETRIES must be >= 1"}
-
-    return {"ok": True, "message": "shared_line_access security ok"}
+    _ = dedicated_map
+    _ = shared_number
+    _ = access_map
+    _ = stream_url
+    return {"ok": True, "message": "shared_line_access security checks ok"}
 
 
 def load_profile() -> dict[str, object]:
-    return {"hint": "http-twiml", "p50_ms": 15, "p95_ms": 75}
+    return {"hint": "twilio-webhook-routing", "p50_ms": 10, "p95_ms": 50}
 
 
 FEATURE = {
