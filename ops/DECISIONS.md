@@ -28,3 +28,20 @@
   - `WaitingAudioController` is pure/deterministic and unit-tested.
   - Mu-law “beep frames” are precomputed once at import time to avoid hot-path CPU.
 
+## 2026-02-18 — Actor mode is first-class (client vs owner)
+
+Decision:
+- Introduce `actor_mode` as a first-class call context dimension alongside `tenant_id` and `tenant_mode`.
+- Shared-line access codes resolve to `{tenant_id, actor_mode}` and propagate via Twilio Stream `start.customParameters`.
+
+Implications:
+- Mode-specific instructions/persona are selected by `(tenant_id, actor_mode)` with no heavy work in the voice hot path.
+- Feature/skill execution must be mode-aware and **fail closed** (owner-only operations are denied in client mode).
+- Configuration is env-first for MVP (JSON maps), with DB-backed policy later.
+
+## 2026-02-18 — Realtime response.create must request supported modalities
+
+Decision:
+- Do not assume `['audio']` is a valid response modality.
+- Drive `response.create.response.modalities` from `session.output_modalities` (fallback to `['audio','text']`).
+- Treat `invalid_value` on `response.modalities` as a compatibility signal and force the supported combo.
