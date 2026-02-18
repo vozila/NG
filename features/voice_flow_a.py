@@ -177,6 +177,7 @@ async def _twilio_sender_loop(
     stream_sid_ref: dict[str, str | None],
     buffers: OutgoingAudioBuffers,
     wait_ctl: WaitingAudioController,
+    response_state: dict[str, Any],
 ) -> None:
     """Send frames to Twilio at ~20ms pacing. Prefer main lane, then aux."""
     while True:
@@ -188,6 +189,12 @@ async def _twilio_sender_loop(
         frame: bytes | None = None
         if buffers.main:
             frame = buffers.main.popleft()
+            rid = response_state.get("active_response_id")
+            if isinstance(rid, str):
+                logged_main_ids = response_state.get("logged_twilio_main_frame_ids")
+                if isinstance(logged_main_ids, set) and rid not in logged_main_ids:
+                    _dbg(f"TWILIO_MAIN_FRAME_SENT response_id={rid} bytes={len(frame)}")
+                    logged_main_ids.add(rid)
             await asyncio.sleep(FRAME_SLEEP_S)
         elif wait_ctl.aux_enabled and buffers.aux:
             frame = buffers.aux.popleft()
@@ -234,11 +241,15 @@ async def twilio_stream(websocket: WebSocket) -> None:
     logged_session_created = False
     logged_session_updated = False
     active_response_id: str | None = None
+    response_state: dict[str, Any] = {
+        "active_response_id": None,
+        "logged_delta_ids": set(),
+        "logged_twilio_main_frame_ids": set(),
+    }
     turn_seq = 0
     turn_logged_speech_started = False
     turn_logged_transcript = False
     turn_logged_response_create = False
-    turn_logged_audio_delta = False
 
     def _drop_oldest_put(item: str) -> None:
         try:
@@ -266,7 +277,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
         nonlocal active_response_id
         nonlocal turn_seq
         nonlocal turn_logged_speech_started, turn_logged_transcript
-        nonlocal turn_logged_response_create, turn_logged_audio_delta
+        nonlocal turn_logged_response_create
         while True:
             raw = await openai_ws.recv()
             evt = json.loads(raw)
@@ -300,7 +311,6 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 turn_logged_speech_started = False
                 turn_logged_transcript = False
                 turn_logged_response_create = False
-                turn_logged_audio_delta = False
                 buffers.main.clear()
                 wait_ctl.on_user_speech_started(buffers=buffers)
                 sid = stream_sid_ref.get("streamSid")
@@ -337,6 +347,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 rid = response.get("id")
                 if isinstance(rid, str) and rid:
                     active_response_id = rid
+                    response_state["active_response_id"] = rid
                     _dbg(f"OPENAI_RESPONSE_CREATED id={rid}")
                 continue
 
@@ -355,9 +366,13 @@ async def twilio_stream(websocket: WebSocket) -> None:
                         buffers.main.popleft()
                     buffers.main.append(f)
 
-                if not turn_logged_audio_delta:
-                    _dbg(f"OPENAI_AUDIO_DELTA_RECEIVED turn={turn_seq} etype=response.output_audio.delta")
-                    turn_logged_audio_delta = True
+                evt_rid = evt.get("response_id")
+                rid = evt_rid if isinstance(evt_rid, str) and evt_rid else active_response_id
+                if isinstance(rid, str):
+                    logged_delta_ids = response_state.get("logged_delta_ids")
+                    if isinstance(logged_delta_ids, set) and rid not in logged_delta_ids:
+                        _dbg(f"OPENAI_AUDIO_DELTA_FIRST response_id={rid} bytes={len(chunk)}")
+                        logged_delta_ids.add(rid)
                 continue
 
             if etype == "response.done":
@@ -366,8 +381,10 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 _dbg(f"OPENAI_RESPONSE_DONE id={rid}")
                 if isinstance(rid, str) and rid and rid == active_response_id:
                     active_response_id = None
+                    response_state["active_response_id"] = None
                 if rid is None:
                     active_response_id = None
+                    response_state["active_response_id"] = None
                 continue
 
     async def _send_openai_session_update() -> None:
@@ -383,6 +400,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 stream_sid_ref=stream_sid_ref,
                 buffers=buffers,
                 wait_ctl=wait_ctl,
+                response_state=response_state,
             )
         )
 
