@@ -113,12 +113,12 @@ def _build_openai_session_update(*, voice: str, instructions: str | None) -> dic
     So we do NOT send `session.type`.
 
     We do send:
-      - modalities: ["audio"]
+      - modalities: ["audio", "text"]
       - top-level voice + g711_ulaw input/output audio formats
       - server_vad with interrupt_response
     """
     session: dict[str, Any] = {
-        "modalities": ["audio"],
+        "modalities": ["audio", "text"],
         "voice": voice,
         "input_audio_format": "g711_ulaw",
         "output_audio_format": "g711_ulaw",
@@ -229,6 +229,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
     openai_input_blocked_unknown_param = False
     logged_session_created = False
     logged_session_updated = False
+    response_create_sent = False
 
     def _drop_oldest_put(item: str) -> None:
         try:
@@ -252,7 +253,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
             await openai_ws.send(json.dumps({"type": "input_audio_buffer.append", "audio": audio_b64}))
 
     async def _openai_to_twilio_loop() -> None:
-        nonlocal logged_session_created, logged_session_updated, openai_input_blocked_unknown_param
+        nonlocal logged_session_created, logged_session_updated, openai_input_blocked_unknown_param, response_create_sent
         while True:
             raw = await openai_ws.recv()
             evt = json.loads(raw)
@@ -270,6 +271,9 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     session = evt.get("session") if isinstance(evt.get("session"), dict) else {}
                     _dbg(f"OPENAI_SESSION_UPDATED keys={list(session.keys())}")
                     logged_session_updated = True
+                if not response_create_sent:
+                    await openai_ws.send(json.dumps({"type": "response.create"}))
+                    response_create_sent = True
                 continue
 
             if etype == "error":

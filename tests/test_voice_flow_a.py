@@ -67,7 +67,7 @@ def test_build_openai_session_update_uses_legacy_ulaw_session_schema() -> None:
     msg = _build_openai_session_update(voice="marin", instructions="Be brief.")
 
     assert msg["type"] == "session.update"
-    assert msg["session"]["modalities"] == ["audio"]
+    assert msg["session"]["modalities"] == ["audio", "text"]
     assert msg["session"]["voice"] == "marin"
     assert msg["session"]["input_audio_format"] == "g711_ulaw"
     assert msg["session"]["output_audio_format"] == "g711_ulaw"
