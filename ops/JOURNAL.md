@@ -28,54 +28,19 @@ Automation:
 - `bash scripts/merge_with_gates.sh <branch> "<merge message>"` merges + runs gates + pushes.
 
 ## 2026-02-17 — Flow A waiting/thinking audio lane (anti-regression foundation)
-Context:
-- Prior attempts to “inject a thinking chime” into the main outbound assistant buffer caused regressions
-  (cancel/clear semantics, barge-in, buffers fighting each other).
-Decision implemented:
-- Treat thinking audio as a first-class state with a *separate aux audio lane*.
-- Add a deterministic, unit-tested state machine (`WaitingAudioController`) that:
-  - starts THINKING after a trigger threshold
-  - enqueues a periodic chime into the aux buffer only when due
-  - stops immediately on user speech (clears aux only) and suppresses until wait_end()
-Code touched:
-- `features/voice_flow_a.py`: added aux lane + sender loop scaffold + mu-law chime precompute.
-- `tests/test_voice_flow_a.py`: added deterministic waiting-audio and lane-priority tests.
-Quality evidence:
-- compileall ✅
-- pytest ✅ (16 tests)
-Note:
-- `ruff` is not installed in the current execution environment used to generate this patch.
-  Repo gates should still run `python -m ruff check .` in CI/dev.
 
-## 2026-02-17 — Shared line access + tenant routing for Twilio inbound
 What was added:
-- New feature module: `features/shared_line_access.py`.
-- New Twilio Voice webhooks:
-`POST /twilio/voice` (entry routing) and `POST /twilio/voice/access-code` (DTMF gather callback).
-- Dedicated line behavior: route by `To` and return `<Connect><Stream ...>` immediately.
-- Shared demo line behavior: prompt for 8-digit access code, validate, bounded retries, then connect stream.
-- Stream custom params now include tenant metadata and request id:
-`tenant_id`, `tenant_mode`, `rid`.
-- Flow A update in `features/voice_flow_a.py`: parse `start.customParameters` for
-`tenant_id`, `tenant_mode`, and `rid`, store in in-memory call/session context, log only under debug.
+- `WaitingAudioController` integrated into Flow A WS path with an aux lane concept.
+- Chime default remains OFF: `VOICE_WAIT_CHIME_ENABLED=0`.
+- Tests added to ensure aux does not interfere with main lane and barge-in stops aux immediately.
 
-Flags/env vars:
-- Feature flag (default OFF): `VOZ_FEATURE_SHARED_LINE_ACCESS=0`.
-- Config vars:
-`VOZ_DEDICATED_LINE_MAP_JSON`,
-`VOZ_SHARED_LINE_NUMBER`,
-`VOZ_ACCESS_CODE_MAP_JSON`,
-optional `VOZ_TWILIO_STREAM_URL` (must be `wss://...`, defaults to `wss://example.invalid/twilio/stream`).
-- Debug logging remains gated behind `VOZLIA_DEBUG=1`.
+Why:
+- We explicitly do NOT want “thinking sounds” to fight assistant speech buffers or barge-in.
+- Two lanes + simple precedence rules are safer than mixing audio sources.
 
-Endpoints:
-- `POST /twilio/voice`
-- `POST /twilio/voice/access-code`
-- Existing WS endpoint remains `WS /twilio/stream`.
-
-Rollback instruction:
-- Set `VOZ_FEATURE_SHARED_LINE_ACCESS=0` to disable routing feature and unmount routes.
-- If Twilio webhook was repointed to `/twilio/voice`, repoint it back to the previous handler.
+Next:
+- Implement OpenAI Realtime bridge as main lane source (flagged).
+- Add deterministic pacing and backlog caps for outbound audio.
 
 ## 2026-02-18 — TASK-0200 core DB event store scaffold
 What was added:
@@ -90,3 +55,40 @@ Rollback notes:
 - Keep DB layer dormant by not importing/calling it from feature hot paths until explicitly enabled.
 - For non-persistent local runs, set `VOZ_DB_PATH=:memory:`.
 - Revert the task commit or stop calling `core.db` APIs (no migrations introduced).
+
+## 2026-02-18 — TASK-0201.5 Flow A audible speech (Realtime audio out)
+
+Outcome:
+- Confirmed end-to-end audible assistant speech on the shared line.
+- OpenAI Realtime emitted `response.output_audio.delta` and Twilio received paced μ-law frames.
+
+Key learning (root cause of prior “no audio deltas”):
+- The Realtime server rejected `response.modalities=['audio']` with `invalid_value`.
+- Supported combinations were `['text']` and `['audio','text']`.
+- Fix: request `['audio','text']` (ideally driven from `session.output_modalities`).
+
+Evidence (≤5 log lines):
+- `OPENAI_RESPONSE_CREATE_SENT rid=1 modalities=['audio', 'text']`
+- `OPENAI_RESPONSE_CREATED id=resp_DAjQJUH46ITierNlCpbeU`
+- `OPENAI_AUDIO_DELTA_FIRST response_id=resp_DAjQJUH46ITierNlCpbeU bytes=800`
+- `TWILIO_MAIN_FRAME_SENT first=1 response_id=resp_DAjQJUH46ITierNlCpbeU bytes=160 q_main=4`
+- Caller heard synthesized speech.
+
+Rollback:
+- `VOZ_FLOW_A_OPENAI_BRIDGE=0` disables OpenAI bridge (Twilio stream still works).
+
+## 2026-02-18 — Added dual-mode requirement (client vs owner)
+
+New requirement:
+- Each tenant supports two interaction modes:
+  - `actor_mode=client` (customer-facing protocol + customer-only capabilities)
+  - `actor_mode=owner` (owner protocol + analytics/admin capabilities)
+
+Plan updates:
+- Build plan updated to include access-code → `{tenant_id, actor_mode}` routing and mode-aware feature/skill gating.
+- Taskboard updated with achieved Flow A audio output and next tasks for dual-mode access + policy enforcement.
+
+Quality gates (local ZIP snapshot):
+- compileall ✅
+- ruff ✅
+- pytest ✅
