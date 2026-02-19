@@ -2,6 +2,24 @@
 
 **Timezone:** America/New_York
 
+## 2026-02-19 — Flow A transcript payload persistence fix for post-call extraction
+
+What changed:
+- Patched `features/voice_flow_a.py` so `flow_a.transcript_completed` now stores transcript text in event payload:
+  - `transcript` (sanitized whitespace, bounded length)
+  - `transcript_len`
+- This resolves extractor read failures where only transcript length was persisted.
+- Verified production behavior:
+  - owner events show transcript text on transcript-completed events
+  - `/admin/postcall/extract` returns `ok: true`
+  - output events `postcall.summary` and `postcall.lead` are written for the same `rid`
+
+Proof (<=5):
+- `ruff check features/voice_flow_a.py tests/test_voice_flow_a.py` ✅
+- `.venv/bin/python -m pytest -q tests/test_voice_flow_a.py tests/test_postcall_extract.py` ✅ (`19 passed`)
+- Owner events payload includes `"transcript":"..."` on `flow_a.transcript_completed` ✅
+- Extract endpoint response includes `ok: true` with emitted event ids ✅
+
 ## 2026-02-19 — TASK-0213 post-call extraction model-first + fallback hardening
 
 What changed:

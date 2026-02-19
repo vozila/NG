@@ -26,6 +26,9 @@ Out-of-band extraction endpoint that reads call transcript facts and writes stru
 ## Execution model
 Deterministic shape:
 1. Read transcript facts for `(tenant_id, rid)` from event store.
+   - Required source payload fields from Flow A events:
+     - `flow_a.transcript_completed.payload.transcript` (or `text`)
+     - `flow_a.transcript_completed.payload.transcript_len` retained for metadata
 2. Proposer returns JSON object:
    - Primary: model extraction call (`/v1/responses`) with strict JSON schema output.
    - Fallback: deterministic heuristic proposer if model is disabled, missing key, timeout, or errors.
@@ -49,6 +52,7 @@ Output event types:
 
 ## Failure model
 - No transcript facts found => `404 transcript_not_found`.
+  - Common cause: transcript events exist but payload only contains `transcript_len` without `transcript` text.
 - Schema-invalid proposer output:
   - write `postcall.extract_failed` with reason
   - return `422 schema_invalid`
@@ -70,3 +74,28 @@ Same `(tenant_id, rid, idempotency_key)` will not duplicate written events.
 ## Rollback
 - Set `VOZ_POSTCALL_EXTRACT_ENABLED=0` to keep feature loaded but inactive.
 - Set `VOZ_FEATURE_POSTCALL_EXTRACT=0` to remove route exposure.
+
+## Runbook — Verify In Production
+1. Confirm routes are mounted:
+   - `curl -sS https://vozlia-ng.onrender.com/openapi.json | jq -r '.paths | keys[]' | grep -E '^/admin/postcall/extract$|^/owner/events$'`
+   - Expect both `/admin/postcall/extract` and `/owner/events`.
+
+2. Validate owner read auth + recent call facts:
+   - `curl -sS "https://vozlia-ng.onrender.com/owner/events?tenant_id=tenant_demo&limit=20" -H "Authorization: Bearer $VOZ_OWNER_API_KEY"`
+   - Expect `flow_a.*` events for a recent call rid.
+
+3. Confirm transcript payload is present:
+   - `flow_a.transcript_completed.payload.transcript` must exist (not only `transcript_len`).
+
+4. Run extraction for that rid:
+   - `RID='<real_call_rid>'`
+   - `curl -sS -X POST "https://vozlia-ng.onrender.com/admin/postcall/extract" -H "Authorization: Bearer $VOZ_ADMIN_API_KEY" -H "Content-Type: application/json" -d "{\"tenant_id\":\"tenant_demo\",\"rid\":\"$RID\",\"ai_mode\":\"owner\",\"idempotency_key\":\"demo-$RID-v1\"}"`
+   - Expect: `{"ok":true,...,"events":{"summary":"...","lead":"..."}}` (and optional `appt_request`).
+
+5. Verify writes in owner events feed:
+   - `curl -sS "https://vozlia-ng.onrender.com/owner/events?tenant_id=tenant_demo&limit=50" -H "Authorization: Bearer $VOZ_OWNER_API_KEY"`
+   - Expect new `postcall.summary` and `postcall.lead` events for the same rid.
+
+6. Verify idempotency:
+   - Re-run step 4 with same `idempotency_key`.
+   - Expect no duplicate `postcall.summary`/`postcall.lead` writes.

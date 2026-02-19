@@ -1,6 +1,6 @@
 # Reference Pack — Voice Flow A (Twilio ↔ OpenAI Realtime)
 
-**Updated:** 2026-02-18 (America/New_York)
+**Updated:** 2026-02-19 (America/New_York)
 
 ## 1) Golden behavior loop shape
 1. Twilio `start` arrives with `customParameters` including `tenant_id`, `tenant_mode`, and `ai_mode`.
@@ -80,3 +80,5 @@
   - Twilio `stop`/disconnect/cleanup -> `flow_a.call_stopped`
 - Required payload baseline on every event:
   - `tenant_id`, `rid`, `ai_mode`, `tenant_mode`
+- Transcript-completed payload contract:
+  - include `transcript_len` and `transcript` text (sanitized/bounded) so downstream post-call extraction can operate.

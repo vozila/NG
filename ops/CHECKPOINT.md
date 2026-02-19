@@ -9,6 +9,7 @@
 - Owner read-surface is available behind feature flag via `GET /owner/events` and `GET /owner/events/latest`.
 - Post-call extraction endpoint is available behind feature/runtime gates (`VOZ_FEATURE_POSTCALL_EXTRACT`, `VOZ_POSTCALL_EXTRACT_ENABLED`), with admin bearer auth.
 - Post-call extraction proposer is model-first (Responses API JSON schema) with deterministic heuristic fallback and strict validation before writes.
+- Flow A now persists transcript text on `flow_a.transcript_completed` payloads (`transcript` + `transcript_len`), enabling post-call extraction reads.
 
 ## Last known good
 - Flow A OpenAI Realtime bridge: audio deltas received + Twilio μ-law frames sent + caller hears speech.
@@ -16,6 +17,10 @@
 - Known-good audible breadcrumbs:
   - `OPENAI_AUDIO_DELTA_FIRST ...`
   - `TWILIO_MAIN_FRAME_SENT first=1 ...`
+- Known-good post-call extraction evidence:
+  - `flow_a.transcript_completed` includes `payload.transcript`
+  - `/admin/postcall/extract` returns `ok: true`
+  - owner events include `postcall.summary` and `postcall.lead` for the same `rid`
 
 ## Next actions
 - Add/verify feature gating via `VOZ_FEATURE_<NAME>_AI_MODES`.

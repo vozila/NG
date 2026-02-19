@@ -1,6 +1,6 @@
 # Vozlia NG — KNOWN GOTCHAS (do not relearn)
 
-**Updated:** 2026-02-18 (America/New_York)
+**Updated:** 2026-02-19 (America/New_York)
 
 ## Flow A (Twilio WS ↔ OpenAI Realtime)
 
@@ -57,3 +57,17 @@ Fix:
 ## Observability (general)
 - Logging inside 20ms audio loops is not “free”. Keep per-frame logs OFF; use first-delta breadcrumbs only.
 
+## Post-call extraction
+
+### 7) `transcript_not_found` despite successful calls
+Symptom:
+- `POST /admin/postcall/extract` returns `{"detail":"transcript_not_found"}` even though call logs show transcript completion.
+
+Root cause:
+- `flow_a.transcript_completed` events only persisted `transcript_len` and not transcript text.
+
+Fix:
+- Ensure Flow A persists transcript text in payload:
+  - `transcript` (sanitized, bounded)
+  - `transcript_len`
+- Then run extraction using the real call `rid` (typically `callSid`).
