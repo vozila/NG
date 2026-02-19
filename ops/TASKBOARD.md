@@ -42,6 +42,19 @@
       - Proposer: model-first (`/v1/responses` JSON schema) with deterministic heuristic fallback
       - Writes: `postcall.summary`, `postcall.lead`, optional `postcall.appt_request`
       - Fail-closed: schema invalid writes `postcall.extract_failed` + returns `422`
+- [x] TASK-0216 — Post-call reconcile runner (admin, out-of-band)
+      - Endpoint: `POST /admin/postcall/reconcile`
+      - Auth: `Authorization: Bearer <VOZ_ADMIN_API_KEY>`
+      - Gating: `VOZ_FEATURE_POSTCALL_RECONCILE=1` + `VOZ_POSTCALL_RECONCILE_ENABLED=1`
+      - Scans tenant `flow_a.call_stopped`, skips existing `postcall.summary`, triggers internal `/admin/postcall/extract`
+      - Uses `ai_mode` from `flow_a.call_stopped.payload` and idempotency key `reconcile-{rid}-v1`
+      - Added `dry_run` support and bounded `limit<=200`
+- [x] TASK-0215 — Owner insights summary (deterministic analytics, owner-only)
+      - Endpoint: `GET /owner/insights/summary`
+      - Auth: `Authorization: Bearer <VOZ_OWNER_API_KEY>`
+      - Gate: `VOZ_FEATURE_OWNER_INSIGHTS=1`
+      - Deterministic tenant-scoped counts over `flow_a.*` and `postcall.*` events
+      - Defaults to last 24h window and bounds to max 7 days
 
 ## NOW (next high-leverage work)
 - [ ] TASK-0207 — Mode-aware capability gating (MVP env-only; **fail closed**)

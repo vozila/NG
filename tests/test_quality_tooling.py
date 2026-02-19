@@ -9,6 +9,8 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from core.app import create_app
+from core.quality import run_regression
+from core.registry import FeatureSpec, set_enabled
 import features.admin_quality as admin_quality
 
 
@@ -67,3 +69,28 @@ def test_admin_quality_regression_endpoint_requires_admin_bearer(monkeypatch) ->
     )
     assert authorized.status_code == 200
     assert "status" in authorized.json()
+
+
+def test_run_regression_records_selftest_exception_in_message() -> None:
+    def _boom() -> dict:
+        raise RuntimeError("boom")
+
+    spec = FeatureSpec(
+        key="boom_feature",
+        enabled_env="VOZ_FEATURE_BOOM",
+        router=object(),
+        selftests=_boom,
+        security_checks=lambda: {"ok": True},
+        load_profile=lambda: {"ok": True},
+    )
+    set_enabled({"boom_feature": spec})
+    try:
+        out = run_regression()
+    finally:
+        set_enabled({})
+
+    assert out["status"] == "fail"
+    result = out["results"][0]
+    assert result["feature"] == "boom_feature"
+    assert result["ok"] is False
+    assert result["message"] == "RuntimeError: boom"

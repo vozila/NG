@@ -2,6 +2,32 @@
 
 **Timezone:** America/New_York
 
+## 2026-02-19 — TASK-0216 reconcile runner + TASK-0215 owner insights summary
+
+What changed:
+- Added `features/postcall_reconcile.py`:
+  - `POST /admin/postcall/reconcile` (admin bearer)
+  - scans tenant `flow_a.call_stopped` events, skips existing `postcall.summary`, triggers internal `/admin/postcall/extract`
+  - uses `ai_mode` from call-stopped payload
+  - uses idempotency key `reconcile-{rid}-v1`
+  - bounded request (`limit<=200`) and includes optional `dry_run`
+  - debug signatures:
+    - `POSTCALL_RECONCILE_START ...`
+    - `POSTCALL_RECONCILE_DONE attempted=... created=... skipped=... errors=...`
+- Added `features/owner_insights.py`:
+  - `GET /owner/insights/summary` (owner bearer)
+  - deterministic tenant-scoped counts over `flow_a.*` and `postcall.*`
+  - default window last 24h, bounded max window 7 days
+  - debug signature:
+    - `OWNER_INSIGHTS_SUMMARY tenant_id=... since_ts=... until_ts=...`
+- Added task docs and reference packs:
+  - `.agents/tasks/TASK-0216.md`, `.agents/tasks/TASK-0215.md`
+  - `ops/REFERENCE_PACKS/postcall_reconcile.md`, `ops/REFERENCE_PACKS/owner_insights.md`
+
+Proof (<=5):
+- `ruff check features/postcall_reconcile.py features/owner_insights.py tests/test_postcall_reconcile.py tests/test_owner_insights.py` ✅
+- `.venv/bin/python -m pytest -q tests/test_postcall_reconcile.py tests/test_owner_insights.py` ✅
+
 ## 2026-02-19 — Flow A transcript payload persistence fix for post-call extraction
 
 What changed:

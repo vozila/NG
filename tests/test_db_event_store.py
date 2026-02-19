@@ -14,9 +14,16 @@ def test_schema_creation_in_temp_db(monkeypatch, tmp_path) -> None:
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('tenants', 'events')"
             ).fetchall()
         }
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_events_%'"
+            ).fetchall()
+        }
 
     assert db_path.exists()
     assert tables == {"tenants", "events"}
+    assert "idx_events_tenant_rid_ts" in indexes
 
 
 def test_insert_event_and_query(monkeypatch, tmp_path) -> None:

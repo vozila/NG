@@ -1,15 +1,15 @@
 {
-  "status": "ok",
-  "ts": 1771469733,
+  "status": "fail",
+  "ts": 1771479416,
   "enabled_features": [
-    "admin_quality"
+    "boom_feature"
   ],
   "results": [
     {
-      "feature": "admin_quality",
-      "ok": true,
-      "ms": 0.0,
-      "message": "admin_quality selftests ok"
+      "feature": "boom_feature",
+      "ok": false,
+      "ms": 0.01,
+      "message": "RuntimeError: boom"
     }
   ],
   "report_path": "ops/QUALITY_REPORTS/latest_regression.json"

@@ -10,6 +10,8 @@
 - Post-call extraction endpoint is available behind feature/runtime gates (`VOZ_FEATURE_POSTCALL_EXTRACT`, `VOZ_POSTCALL_EXTRACT_ENABLED`), with admin bearer auth.
 - Post-call extraction proposer is model-first (Responses API JSON schema) with deterministic heuristic fallback and strict validation before writes.
 - Flow A now persists transcript text on `flow_a.transcript_completed` payloads (`transcript` + `transcript_len`), enabling post-call extraction reads.
+- Post-call reconcile runner is available behind feature/runtime gates (`VOZ_FEATURE_POSTCALL_RECONCILE`, `VOZ_POSTCALL_RECONCILE_ENABLED`).
+- Owner insights summary endpoint is available behind `VOZ_FEATURE_OWNER_INSIGHTS`.
 
 ## Last known good
 - Flow A OpenAI Realtime bridge: audio deltas received + Twilio μ-law frames sent + caller hears speech.
@@ -21,7 +23,10 @@
   - `flow_a.transcript_completed` includes `payload.transcript`
   - `/admin/postcall/extract` returns `ok: true`
   - owner events include `postcall.summary` and `postcall.lead` for the same `rid`
+- Known-good reconcile + insights evidence:
+  - `/admin/postcall/reconcile` returns attempted/created/skipped/errors counts
+  - `/owner/insights/summary` returns deterministic tenant-scoped counts and latest rid
 
 ## Next actions
 - Add/verify feature gating via `VOZ_FEATURE_<NAME>_AI_MODES`.
-- Build owner analytics views on top of durable `flow_a.*` events.
+- Build owner analytics views on top of durable `flow_a.*` and `postcall.*` facts.

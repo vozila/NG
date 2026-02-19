@@ -34,7 +34,7 @@ def run_regression() -> dict[str, Any]:
                 msg = getattr(out, "message", None)
         except Exception as e:
             passed = False
-            msg = f"{type(e).name}: {e}"
+            msg = f"{type(e).__name__}: {e}"
 
         dt_ms = (time.perf_counter() - t0) * 1000.0
         ok = ok and passed

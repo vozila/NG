@@ -71,3 +71,17 @@ Fix:
   - `transcript` (sanitized, bounded)
   - `transcript_len`
 - Then run extraction using the real call `rid` (typically `callSid`).
+
+### 8) Reconcile internal callback fails due to disallowed `VOZ_SELF_BASE_URL`
+Symptom:
+- `POST /admin/postcall/reconcile` returns higher `errors` than expected.
+- Security checks indicate invalid `VOZ_SELF_BASE_URL` host.
+
+Root cause:
+- Reconcile now validates callback host before sending admin bearer.
+- Host must be local/known-safe (`127.0.0.1`, `localhost`, `::1`, Render hostnames, or explicit allowlist).
+
+Fix:
+- Set `VOZ_SELF_BASE_URL` to a safe internal URL (default loopback is preferred).
+- If a non-default trusted host is required, add it via:
+  - `VOZ_SELF_BASE_URL_ALLOWED_HOSTS=host1,host2`

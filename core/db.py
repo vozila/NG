@@ -59,6 +59,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_events_tenant_type_ts ON events(tenant_id, event_type, ts)"
     )
     conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_events_tenant_rid_ts ON events(tenant_id, rid, ts)"
+    )
+    conn.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_events_tenant_idempotency
         ON events(tenant_id, idempotency_key)
