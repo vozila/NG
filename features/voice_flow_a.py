@@ -67,6 +67,15 @@ def _env_str(name: str, default: str) -> str:
     return raw or default
 
 
+def _sanitize_transcript_for_event(transcript: str, max_chars: int = 500) -> str:
+    cleaned = " ".join(transcript.split()).strip()
+    if not cleaned:
+        return ""
+    if len(cleaned) <= max_chars:
+        return cleaned
+    return cleaned[:max_chars]
+
+
 def _normalize_ai_mode(ai_mode: str | None) -> str:
     mode = (ai_mode or "").strip().lower()
     return mode if mode in {"customer", "owner"} else "customer"
@@ -520,6 +529,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
                         "tenant_mode": call_tenant_mode,
                         "turn": turn_seq,
                         "transcript_len": len(transcript),
+                        "transcript": _sanitize_transcript_for_event(transcript),
                     },
                 )
 

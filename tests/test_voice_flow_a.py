@@ -11,6 +11,7 @@ from features.voice_flow_a import (
     _build_twilio_clear_msg,
     _chunk_to_frames,
     _resolve_actor_mode_policy,
+    _sanitize_transcript_for_event,
 )
 
 
@@ -216,3 +217,15 @@ def test_emit_flow_a_event_kill_switch_on_emits_expected_tuple(monkeypatch) -> N
     )
 
     assert calls == [("tenant_demo", "rid-456", "flow_a.call_started")]
+
+
+def test_sanitize_transcript_for_event_normalizes_whitespace() -> None:
+    out = _sanitize_transcript_for_event(" hello   there \n\n this   is  a test ")
+    assert out == "hello there this is a test"
+
+
+def test_sanitize_transcript_for_event_truncates_to_max_chars() -> None:
+    src = "a" * 700
+    out = _sanitize_transcript_for_event(src, max_chars=500)
+    assert len(out) == 500
+    assert out == "a" * 500
