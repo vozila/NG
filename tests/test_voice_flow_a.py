@@ -10,6 +10,7 @@ from features.voice_flow_a import (
     _build_openai_session_update,
     _build_twilio_clear_msg,
     _chunk_to_frames,
+    _lifecycle_event_payload,
     _resolve_actor_mode_policy,
     _sanitize_transcript_for_event,
 )
@@ -229,3 +230,39 @@ def test_sanitize_transcript_for_event_truncates_to_max_chars() -> None:
     out = _sanitize_transcript_for_event(src, max_chars=500)
     assert len(out) == 500
     assert out == "a" * 500
+
+
+def test_lifecycle_event_payload_includes_from_to_numbers() -> None:
+    payload = _lifecycle_event_payload(
+        tenant_id="tenant_demo",
+        rid="rid-1",
+        ai_mode="owner",
+        tenant_mode="shared",
+        call_sid="CA123",
+        stream_sid="MZ123",
+        from_number=" +15180001111 ",
+        to_number="+15180002222",
+        reason="twilio_stop",
+    )
+    assert payload["tenant_id"] == "tenant_demo"
+    assert payload["rid"] == "rid-1"
+    assert payload["from_number"] == "+15180001111"
+    assert payload["to_number"] == "+15180002222"
+    assert payload["reason"] == "twilio_stop"
+
+
+def test_lifecycle_event_payload_missing_numbers_become_none() -> None:
+    payload = _lifecycle_event_payload(
+        tenant_id="tenant_demo",
+        rid="rid-2",
+        ai_mode="customer",
+        tenant_mode="shared",
+        call_sid="CA999",
+        stream_sid="MZ999",
+        from_number=" ",
+        to_number=None,
+        reason=None,
+    )
+    assert payload["from_number"] is None
+    assert payload["to_number"] is None
+    assert "reason" not in payload

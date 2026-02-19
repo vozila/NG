@@ -55,6 +55,20 @@
       - Gate: `VOZ_FEATURE_OWNER_INSIGHTS=1`
       - Deterministic tenant-scoped counts over `flow_a.*` and `postcall.*` events
       - Defaults to last 24h window and bounds to max 7 days
+- [x] TASK-0224 — Flow A lifecycle event contract includes caller metadata
+      - `flow_a.call_started.payload` includes `from_number`, `to_number`
+      - `flow_a.call_stopped.payload` includes `from_number`, `to_number`
+      - Additive payload-only change; no schema changes
+- [x] TASK-0225 — Owner Inbox API (deterministic, owner-auth)
+      - Endpoints: `GET /owner/inbox/leads`, `GET /owner/inbox/appt_requests`
+      - Auth: `Authorization: Bearer <VOZ_OWNER_API_KEY>`
+      - Gates: `VOZ_FEATURE_OWNER_INBOX=1` + `VOZ_OWNER_INBOX_ENABLED=1`
+      - Tenant-scoped SELECT-only normalization with best-effort summary/caller joins
+- [x] TASK-0226 — Postcall SMS notifier (admin, out-of-band)
+      - Endpoint: `POST /admin/postcall/notify/sms`
+      - Auth: `Authorization: Bearer <VOZ_ADMIN_API_KEY>`
+      - Gates: `VOZ_FEATURE_POSTCALL_NOTIFY_SMS=1` + `VOZ_POSTCALL_NOTIFY_SMS_ENABLED=1`
+      - Supports dry-run planning and idempotent non-dry send/write path (`notify.sms_sent`)
 
 ## NOW (next high-leverage work)
 - [ ] TASK-0207 — Mode-aware capability gating (MVP env-only; **fail closed**)

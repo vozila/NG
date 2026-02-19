@@ -67,3 +67,16 @@ Decision:
 Implications:
 - Owner mode and analytics can consume durable `flow_a.*` facts without touching Flow A WS hot path.
 - Emergency rollback is immediate by setting `VOZ_FEATURE_OWNER_EVENTS_API=0`.
+
+## 2026-02-19 — Caller metadata is part of Flow A durable lifecycle contract
+
+Decision:
+- Persist caller metadata on lifecycle events:
+  - `flow_a.call_started.payload.from_number`
+  - `flow_a.call_started.payload.to_number`
+  - `flow_a.call_stopped.payload.from_number`
+  - `flow_a.call_stopped.payload.to_number`
+
+Implications:
+- Downstream owner automations (inbox/notifications) can resolve caller context deterministically from durable events.
+- This remains additive/backward-compatible payload evolution with no DB schema migration.

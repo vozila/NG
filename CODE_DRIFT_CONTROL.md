@@ -54,3 +54,18 @@ For every merge, capture ≤5 log lines or outputs proving:
 - `core/db.py` (new): SQLite-backed multi-tenant scaffold, idempotent schema init, append-only `events` APIs (`emit_event`, `query_events`) with strict tenant scoping.
 - `tests/test_db_event_store.py` (new): schema creation, insert/query, tenant isolation, idempotency-key behavior coverage.
 - `ops/JOURNAL.md`: appended TASK-0200 implementation notes (env vars, rollback guidance).
+
+## 2026-02-19 — Postcall automation + owner inbox batch
+- `features/voice_flow_a.py`: lifecycle payload helper + persisted caller metadata (`from_number`, `to_number`) on `flow_a.call_started`/`flow_a.call_stopped`.
+- `tests/test_voice_flow_a.py`: lifecycle payload contract tests for caller metadata normalization.
+- `features/owner_inbox.py` (new): owner-auth deterministic inbox endpoints for leads/appt requests.
+- `tests/test_owner_inbox.py` (new): auth, tenant isolation, caps/window, normalization coverage.
+- `ops/REFERENCE_PACKS/owner_inbox.md` (new): endpoint/gate/failure/rollback reference.
+- `features/postcall_notify_sms.py` (new): admin SMS notifier with dry-run + idempotent send path.
+- `tests/test_postcall_notify_sms.py` (new): auth/gate/dry-run/idempotency/isolation/cap coverage.
+- `ops/REFERENCE_PACKS/postcall_notify_sms.md` (new): notifier runbook + env requirements.
+- `.agents/tasks/TASK-0224.md` (new): task writeback.
+- `.agents/tasks/TASK-0225.md` (new): task writeback.
+- `.agents/tasks/TASK-0226.md` (new): task writeback.
+- `.agents/tasks/TASK-0227.md` (new): task writeback.
+- `ops/TASKBOARD.md`, `ops/CHECKPOINT.md`, `ops/JOURNAL.md`, `ops/DECISIONS.md`: memory-spine sync for 0224-0227.

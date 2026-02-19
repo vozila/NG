@@ -76,6 +76,33 @@ def _sanitize_transcript_for_event(transcript: str, max_chars: int = 500) -> str
     return cleaned[:max_chars]
 
 
+def _lifecycle_event_payload(
+    *,
+    tenant_id: str | None,
+    rid: str | None,
+    ai_mode: str,
+    tenant_mode: str | None,
+    call_sid: str | None,
+    stream_sid: str | None,
+    from_number: str | None,
+    to_number: str | None,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "rid": rid,
+        "ai_mode": ai_mode,
+        "tenant_mode": tenant_mode,
+        "call_sid": call_sid,
+        "stream_sid": stream_sid,
+        "from_number": (from_number.strip() if isinstance(from_number, str) and from_number.strip() else None),
+        "to_number": (to_number.strip() if isinstance(to_number, str) and to_number.strip() else None),
+    }
+    if reason is not None:
+        payload["reason"] = reason
+    return payload
+
+
 def _normalize_ai_mode(ai_mode: str | None) -> str:
     mode = (ai_mode or "").strip().lower()
     return mode if mode in {"customer", "owner"} else "customer"
@@ -400,6 +427,8 @@ async def twilio_stream(websocket: WebSocket) -> None:
     call_rid: str | None = None
     call_sid: str | None = None
     call_stream_sid: str | None = None
+    call_from_number: str | None = None
+    call_to_number: str | None = None
     event_emit_enabled = _event_emit_enabled()
     call_stopped_emitted = False
 
@@ -707,6 +736,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 tenant_id = tenant_id_raw if isinstance(tenant_id_raw, str) and tenant_id_raw.strip() else None
                 tenant_mode = custom.get("tenant_mode")
                 from_number = custom.get("from_number")
+                to_number = custom.get("to_number")
                 ai_mode_raw = custom.get("ai_mode")
                 ai_mode = _normalize_ai_mode(ai_mode_raw if isinstance(ai_mode_raw, str) else None)
                 call_tenant_id = tenant_id
@@ -715,6 +745,8 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 call_rid = rid if isinstance(rid, str) else None
                 call_sid = call_sid if isinstance(call_sid, str) else None
                 call_stream_sid = stream_sid_ref.get("streamSid")
+                call_from_number = from_number if isinstance(from_number, str) else None
+                call_to_number = to_number if isinstance(to_number, str) else None
                 # Keep compatibility with existing policy resolver that uses client|owner naming.
                 actor_mode = "owner" if ai_mode == "owner" else "client"
                 voice, instructions = _resolve_actor_mode_policy(tenant_id, actor_mode)
@@ -739,14 +771,16 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     tenant_id=call_tenant_id,
                     rid=call_rid,
                     event_type="flow_a.call_started",
-                    payload={
-                        "tenant_id": call_tenant_id,
-                        "rid": call_rid,
-                        "ai_mode": call_ai_mode,
-                        "tenant_mode": call_tenant_mode,
-                        "call_sid": call_sid,
-                        "stream_sid": call_stream_sid,
-                    },
+                    payload=_lifecycle_event_payload(
+                        tenant_id=call_tenant_id,
+                        rid=call_rid,
+                        ai_mode=call_ai_mode,
+                        tenant_mode=call_tenant_mode,
+                        call_sid=call_sid,
+                        stream_sid=call_stream_sid,
+                        from_number=call_from_number,
+                        to_number=call_to_number,
+                    ),
                     idempotency_key=f"{call_rid}:call_started" if call_rid else None,
                 )
 
@@ -779,15 +813,17 @@ async def twilio_stream(websocket: WebSocket) -> None:
                         tenant_id=call_tenant_id,
                         rid=call_rid,
                         event_type="flow_a.call_stopped",
-                        payload={
-                            "tenant_id": call_tenant_id,
-                            "rid": call_rid,
-                            "ai_mode": call_ai_mode,
-                            "tenant_mode": call_tenant_mode,
-                            "reason": "twilio_stop",
-                            "call_sid": call_sid,
-                            "stream_sid": call_stream_sid,
-                        },
+                        payload=_lifecycle_event_payload(
+                            tenant_id=call_tenant_id,
+                            rid=call_rid,
+                            ai_mode=call_ai_mode,
+                            tenant_mode=call_tenant_mode,
+                            call_sid=call_sid,
+                            stream_sid=call_stream_sid,
+                            from_number=call_from_number,
+                            to_number=call_to_number,
+                            reason="twilio_stop",
+                        ),
                         idempotency_key=f"{call_rid}:call_stopped" if call_rid else None,
                     )
                     call_stopped_emitted = True
@@ -800,15 +836,17 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 tenant_id=call_tenant_id,
                 rid=call_rid,
                 event_type="flow_a.call_stopped",
-                payload={
-                    "tenant_id": call_tenant_id,
-                    "rid": call_rid,
-                    "ai_mode": call_ai_mode,
-                    "tenant_mode": call_tenant_mode,
-                    "reason": "twilio_disconnect",
-                    "call_sid": call_sid,
-                    "stream_sid": call_stream_sid,
-                },
+                payload=_lifecycle_event_payload(
+                    tenant_id=call_tenant_id,
+                    rid=call_rid,
+                    ai_mode=call_ai_mode,
+                    tenant_mode=call_tenant_mode,
+                    call_sid=call_sid,
+                    stream_sid=call_stream_sid,
+                    from_number=call_from_number,
+                    to_number=call_to_number,
+                    reason="twilio_disconnect",
+                ),
                 idempotency_key=f"{call_rid}:call_stopped" if call_rid else None,
             )
             call_stopped_emitted = True
@@ -821,15 +859,17 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 tenant_id=call_tenant_id,
                 rid=call_rid,
                 event_type="flow_a.call_stopped",
-                payload={
-                    "tenant_id": call_tenant_id,
-                    "rid": call_rid,
-                    "ai_mode": call_ai_mode,
-                    "tenant_mode": call_tenant_mode,
-                    "reason": "stream_cleanup",
-                    "call_sid": call_sid,
-                    "stream_sid": call_stream_sid,
-                },
+                payload=_lifecycle_event_payload(
+                    tenant_id=call_tenant_id,
+                    rid=call_rid,
+                    ai_mode=call_ai_mode,
+                    tenant_mode=call_tenant_mode,
+                    call_sid=call_sid,
+                    stream_sid=call_stream_sid,
+                    from_number=call_from_number,
+                    to_number=call_to_number,
+                    reason="stream_cleanup",
+                ),
                 idempotency_key=f"{call_rid}:call_stopped" if call_rid else None,
             )
         for t in (in_task, out_task, sender_task):

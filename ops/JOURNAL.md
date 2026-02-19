@@ -2,6 +2,27 @@
 
 **Timezone:** America/New_York
 
+## 2026-02-19 — TASK-0224/0225/0226/0227 delivery + ops sync
+
+What changed:
+- TASK-0224:
+  - `flow_a.call_started` and `flow_a.call_stopped` payload contracts now persist `from_number` and `to_number`.
+- TASK-0225:
+  - added owner inbox feature module:
+    - `GET /owner/inbox/leads`
+    - `GET /owner/inbox/appt_requests`
+  - deterministic tenant-scoped normalization with best-effort summary/caller joins.
+- TASK-0226:
+  - added postcall SMS notifier module:
+    - `POST /admin/postcall/notify/sms`
+  - dry-run planning mode and non-dry idempotent send path (`notify.sms_sent`/`notify.sms_failed`).
+- TASK-0227:
+  - synced memory spine + drift control docs for this batch (`TASKBOARD`, `CHECKPOINT`, `DECISIONS`, `CODE_DRIFT_CONTROL`).
+
+Proof (<=5):
+- `ruff check features/voice_flow_a.py features/owner_inbox.py features/postcall_notify_sms.py tests/test_voice_flow_a.py tests/test_owner_inbox.py tests/test_postcall_notify_sms.py` ✅
+- `.venv/bin/python -m pytest -q tests/test_voice_flow_a.py tests/test_owner_inbox.py tests/test_postcall_notify_sms.py` ✅
+
 ## 2026-02-19 — Reconcile runner efficiency pass (recent-first + bounded concurrency)
 
 What changed:

@@ -13,6 +13,9 @@
 - Post-call reconcile runner is available behind feature/runtime gates (`VOZ_FEATURE_POSTCALL_RECONCILE`, `VOZ_POSTCALL_RECONCILE_ENABLED`).
 - Owner insights summary endpoint is available behind `VOZ_FEATURE_OWNER_INSIGHTS`.
 - Reconcile runner now scans recent stopped calls first and uses bounded concurrency for extraction triggers.
+- Flow A lifecycle events now persist caller metadata (`from_number`, `to_number`) on `flow_a.call_started` and `flow_a.call_stopped`.
+- Owner inbox endpoints are available behind gates (`VOZ_FEATURE_OWNER_INBOX`, `VOZ_OWNER_INBOX_ENABLED`).
+- Postcall SMS notifier is available behind gates (`VOZ_FEATURE_POSTCALL_NOTIFY_SMS`, `VOZ_POSTCALL_NOTIFY_SMS_ENABLED`).
 
 ## Last known good
 - Flow A OpenAI Realtime bridge: audio deltas received + Twilio μ-law frames sent + caller hears speech.
@@ -32,3 +35,6 @@
 ## Next actions
 - Add/verify feature gating via `VOZ_FEATURE_<NAME>_AI_MODES`.
 - Build owner analytics views on top of durable `flow_a.*` and `postcall.*` facts.
+- Roll out caller metadata contract consumers across owner automations (inbox/notify workflows).
+- Validate owner inbox UI integration against normalized `/owner/inbox/*` endpoints.
+- Stage SMS notifier rollout (`dry_run` first, then enable live sends per tenant mapping).

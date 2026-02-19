@@ -80,5 +80,10 @@
   - Twilio `stop`/disconnect/cleanup -> `flow_a.call_stopped`
 - Required payload baseline on every event:
   - `tenant_id`, `rid`, `ai_mode`, `tenant_mode`
+- Event payload contract (lifecycle):
+  - `flow_a.call_started.payload` must include:
+    - `from_number`, `to_number`
+  - `flow_a.call_stopped.payload` must include:
+    - `from_number`, `to_number`
 - Transcript-completed payload contract:
   - include `transcript_len` and `transcript` text (sanitized/bounded) so downstream post-call extraction can operate.
