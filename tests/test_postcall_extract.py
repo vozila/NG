@@ -78,7 +78,7 @@ def test_postcall_extract_idempotency_prevents_duplicate_output_events(monkeypat
 
     monkeypatch.setattr(postcall_extract, "_llm_propose_json", _valid_proposal)
     client = TestClient(create_app())
-    body = {"tenant_id": "tenant_a", "rid": "rid-2", "ai_mode": "owner", "idempotency_key": "idem-2"}
+    body = {"tenant_id": "tenant_a", "rid": "rid-2", "ai_mode": "customer", "idempotency_key": "idem-2"}
 
     first = client.post("/admin/postcall/extract", json=body, headers=_auth())
     second = client.post("/admin/postcall/extract", json=body, headers=_auth())
@@ -88,6 +88,42 @@ def test_postcall_extract_idempotency_prevents_duplicate_output_events(monkeypat
     assert len(query_events("tenant_a", event_type="postcall.summary", limit=10)) == 1
     assert len(query_events("tenant_a", event_type="postcall.lead", limit=10)) == 1
     assert len(query_events("tenant_a", event_type="postcall.appt_request", limit=10)) == 1
+
+
+def test_postcall_extract_owner_mode_emits_summary_only(monkeypatch, tmp_path) -> None:
+    _set_env(monkeypatch, db_path=str(tmp_path / "postcall_owner_mode.sqlite3"))
+    _seed_transcript(
+        tenant_id="tenant_a",
+        rid="rid-owner-1",
+        text="Show me insights and call trends for this week.",
+    )
+
+    def _owner_proposal(*, transcript: str, ai_mode: str):
+        return {
+            "summary": {"headline": "Owner analytics call", "bullet_points": ["bp1"], "sentiment": "neutral"},
+            "lead": {"qualified": True, "score": 95, "stage": "hot", "reasons": ["contains intent words"]},
+            "appt_request": {
+                "requested": True,
+                "channel": "phone",
+                "preferred_window": "tomorrow",
+                "confidence": 0.95,
+            },
+        }
+
+    monkeypatch.setattr(postcall_extract, "_llm_propose_json", _owner_proposal)
+    client = TestClient(create_app())
+    body = {"tenant_id": "tenant_a", "rid": "rid-owner-1", "ai_mode": "owner", "idempotency_key": "idem-owner"}
+    resp = client.post("/admin/postcall/extract", json=body, headers=_auth())
+    assert resp.status_code == 200
+    out = resp.json()
+    assert out["ok"] is True
+    assert "summary" in out["events"]
+    assert "lead" not in out["events"]
+    assert "appt_request" not in out["events"]
+
+    assert len(query_events("tenant_a", event_type="postcall.summary", limit=10)) == 1
+    assert len(query_events("tenant_a", event_type="postcall.lead", limit=10)) == 0
+    assert len(query_events("tenant_a", event_type="postcall.appt_request", limit=10)) == 0
 
 
 def test_postcall_extract_enforces_tenant_isolation(monkeypatch, tmp_path) -> None:

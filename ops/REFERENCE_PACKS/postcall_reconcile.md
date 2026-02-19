@@ -21,6 +21,7 @@ Admin out-of-band runner that backfills missing post-call outputs by reusing exi
 
 ## Execution model
 1. Query `flow_a.call_stopped` events for `(tenant_id, since_ts, limit)`.
+   - Ordering is recent-first (`ORDER BY ts DESC`) so bounded runs prioritize newest calls.
 2. For each `rid`, skip if `postcall.summary` already exists.
 3. Use `ai_mode` from call-stopped payload.
 4. Trigger internal HTTP call to:
@@ -33,8 +34,12 @@ Admin out-of-band runner that backfills missing post-call outputs by reusing exi
   - default: `http://127.0.0.1:${PORT}`
 - `VOZ_POSTCALL_RECONCILE_TIMEOUT_MS`:
   - default: `3000`
+- `VOZ_POSTCALL_RECONCILE_CONCURRENCY`:
+  - default: `4`
+  - bounded `1..10`
 
 Internal extract call is run off-loop using `asyncio.to_thread(...)` to avoid blocking async handler execution.
+Batched trigger calls run with bounded concurrency (semaphore) for predictable load.
 
 ## Response shape
 - `ok`, `tenant_id`, `attempted`, `created`, `skipped`, `errors`, `dry_run`

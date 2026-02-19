@@ -2,6 +2,25 @@
 
 **Timezone:** America/New_York
 
+## 2026-02-19 — Reconcile runner efficiency pass (recent-first + bounded concurrency)
+
+What changed:
+- Updated `features/postcall_reconcile.py`:
+  - reconcile now scans `flow_a.call_stopped` rows in recent-first order (`ORDER BY ts DESC`)
+  - extraction triggers now execute with bounded concurrency using a semaphore
+  - new env knob: `VOZ_POSTCALL_RECONCILE_CONCURRENCY` (bounded `1..10`, default `4`)
+- Added tests for:
+  - recent-first behavior with `limit=1`
+  - bounded concurrency cap enforcement
+- Updated reference docs to clarify:
+  - reconcile recent-first/cap behavior
+  - owner analytics query `limit` semantics with and without dimensions
+
+Proof (<=5):
+- `ruff check features/postcall_reconcile.py tests/test_postcall_reconcile.py` ✅
+- `.venv/bin/python -m pytest -q tests/test_postcall_reconcile.py` ✅
+- `.venv/bin/python -m pytest -q` ✅
+
 ## 2026-02-19 — TASK-0216 reconcile runner + TASK-0215 owner insights summary
 
 What changed:

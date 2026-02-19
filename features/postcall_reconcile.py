@@ -24,7 +24,7 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.config import is_debug
-from core.db import query_events, query_events_for_rid
+from core.db import get_conn, query_events_for_rid
 from core.logging import logger
 
 router = APIRouter(prefix="/admin/postcall", tags=["postcall-reconcile"])
@@ -111,6 +111,43 @@ def _extract_timeout_s() -> float:
     return ms / 1000.0
 
 
+def _reconcile_concurrency() -> int:
+    raw = (os.getenv("VOZ_POSTCALL_RECONCILE_CONCURRENCY") or "4").strip()
+    try:
+        n = int(raw)
+    except Exception:
+        n = 4
+    return max(1, min(n, 10))
+
+
+def _recent_call_stopped_rows(*, tenant_id: str, since_ts: int, limit: int) -> list[dict[str, Any]]:
+    # Recent-first scan avoids repeatedly reconciling old calls when limit is bounded.
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT event_id, tenant_id, rid, event_type, ts, payload_json
+            FROM events
+            WHERE tenant_id = ? AND event_type = 'flow_a.call_stopped' AND ts >= ?
+            ORDER BY ts DESC, event_id DESC
+            LIMIT ?
+            """,
+            (tenant_id, int(since_ts), int(limit)),
+        ).fetchall()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        out.append(
+            {
+                "event_id": str(row["event_id"]),
+                "tenant_id": str(row["tenant_id"]),
+                "rid": str(row["rid"]),
+                "event_type": str(row["event_type"]),
+                "ts": int(row["ts"]),
+                "payload": json.loads(str(row["payload_json"])),
+            }
+        )
+    return out
+
+
 def _invoke_extract_http(*, tenant_id: str, rid: str, ai_mode: str, idempotency_key: str) -> tuple[int, str]:
     admin_key = _admin_api_key()
     if admin_key is None:
@@ -163,11 +200,14 @@ async def postcall_reconcile(
     if (os.getenv("VOZ_POSTCALL_RECONCILE_ENABLED") or "0").strip() != "1":
         raise HTTPException(status_code=503, detail="postcall reconcile disabled")
 
-    _dbg(f"POSTCALL_RECONCILE_START tenant_id={body.tenant_id} since_ts={body.since_ts} limit={body.limit}")
+    concurrency = _reconcile_concurrency()
+    _dbg(
+        f"POSTCALL_RECONCILE_START tenant_id={body.tenant_id} since_ts={body.since_ts} "
+        f"limit={body.limit} concurrency={concurrency}"
+    )
 
-    rows = query_events(
+    rows = _recent_call_stopped_rows(
         tenant_id=body.tenant_id,
-        event_type="flow_a.call_stopped",
         since_ts=body.since_ts,
         limit=body.limit,
     )
@@ -178,6 +218,7 @@ async def postcall_reconcile(
     errors = 0
     seen_rids: set[str] = set()
 
+    candidates: list[tuple[str, str]] = []
     for row in rows:
         rid = str(row.get("rid") or "").strip()
         if not rid:
@@ -205,22 +246,30 @@ async def postcall_reconcile(
             continue
 
         attempted += 1
-        if body.dry_run:
-            continue
+        candidates.append((rid, ai_mode))
 
-        try:
-            status, _resp = await _trigger_extract(
-                tenant_id=body.tenant_id,
-                rid=rid,
-                ai_mode=ai_mode,
-                idempotency_key=f"reconcile-{rid}-v1",
-            )
-            if status == 200:
+    if not body.dry_run and candidates:
+        sem = asyncio.Semaphore(concurrency)
+
+        async def _run_one(rid: str, ai_mode: str) -> tuple[bool, bool]:
+            async with sem:
+                try:
+                    status, _resp = await _trigger_extract(
+                        tenant_id=body.tenant_id,
+                        rid=rid,
+                        ai_mode=ai_mode,
+                        idempotency_key=f"reconcile-{rid}-v1",
+                    )
+                    return (status == 200, status != 200)
+                except Exception:
+                    return (False, True)
+
+        task_results = await asyncio.gather(*[_run_one(rid, ai_mode) for rid, ai_mode in candidates])
+        for was_created, was_error in task_results:
+            if was_created:
                 created += 1
-            else:
+            if was_error:
                 errors += 1
-        except Exception:
-            errors += 1
 
     _dbg(
         f"POSTCALL_RECONCILE_DONE attempted={attempted} created={created} "

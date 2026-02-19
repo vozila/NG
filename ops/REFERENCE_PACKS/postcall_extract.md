@@ -47,8 +47,17 @@ Debug signatures (`VOZLIA_DEBUG=1`):
 
 Output event types:
 - `postcall.summary`
-- `postcall.lead`
-- `postcall.appt_request` (only when request is detected)
+- `postcall.lead` (customer mode only)
+- `postcall.appt_request` (customer mode only, and only when request is detected)
+
+Mode-aware output policy:
+- `ai_mode=customer`:
+  - emits `postcall.summary`
+  - may emit `postcall.lead`
+  - may emit `postcall.appt_request`
+- `ai_mode=owner`:
+  - emits `postcall.summary` only
+  - does not emit `postcall.lead` or `postcall.appt_request`
 
 ## Failure model
 - No transcript facts found => `404 transcript_not_found`.
@@ -90,11 +99,13 @@ Same `(tenant_id, rid, idempotency_key)` will not duplicate written events.
 4. Run extraction for that rid:
    - `RID='<real_call_rid>'`
    - `curl -sS -X POST "https://vozlia-ng.onrender.com/admin/postcall/extract" -H "Authorization: Bearer $VOZ_ADMIN_API_KEY" -H "Content-Type: application/json" -d "{\"tenant_id\":\"tenant_demo\",\"rid\":\"$RID\",\"ai_mode\":\"owner\",\"idempotency_key\":\"demo-$RID-v1\"}"`
-   - Expect: `{"ok":true,...,"events":{"summary":"...","lead":"..."}}` (and optional `appt_request`).
+   - Customer mode expect: `{"ok":true,...,"events":{"summary":"...","lead":"..."}}` (and optional `appt_request`).
+   - Owner mode expect: `{"ok":true,...,"events":{"summary":"..."}}`.
 
 5. Verify writes in owner events feed:
    - `curl -sS "https://vozlia-ng.onrender.com/owner/events?tenant_id=tenant_demo&limit=50" -H "Authorization: Bearer $VOZ_OWNER_API_KEY"`
-   - Expect new `postcall.summary` and `postcall.lead` events for the same rid.
+   - Customer mode: expect new `postcall.summary` and `postcall.lead` (optional `postcall.appt_request`).
+   - Owner mode: expect only `postcall.summary`.
 
 6. Verify idempotency:
    - Re-run step 4 with same `idempotency_key`.

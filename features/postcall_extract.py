@@ -338,34 +338,36 @@ async def postcall_extract(
         },
         idempotency_key=f"{base_idem}:summary",
     )
-    lead_event_id = emit_event(
-        tenant_id=body.tenant_id,
-        rid=body.rid,
-        event_type="postcall.lead",
-        payload_dict={
-            "tenant_id": body.tenant_id,
-            "rid": body.rid,
-            "ai_mode": body.ai_mode,
-            **parsed.lead.model_dump(),
-        },
-        idempotency_key=f"{base_idem}:lead",
-    )
-
-    emitted: dict[str, str] = {"summary": summary_event_id, "lead": lead_event_id}
-    if parsed.appt_request.requested:
-        appt_event_id = emit_event(
+    emitted: dict[str, str] = {"summary": summary_event_id}
+    if body.ai_mode == "customer":
+        lead_event_id = emit_event(
             tenant_id=body.tenant_id,
             rid=body.rid,
-            event_type="postcall.appt_request",
+            event_type="postcall.lead",
             payload_dict={
                 "tenant_id": body.tenant_id,
                 "rid": body.rid,
                 "ai_mode": body.ai_mode,
-                **parsed.appt_request.model_dump(),
+                **parsed.lead.model_dump(),
             },
-            idempotency_key=f"{base_idem}:appt_request",
+            idempotency_key=f"{base_idem}:lead",
         )
-        emitted["appt_request"] = appt_event_id
+        emitted["lead"] = lead_event_id
+
+        if parsed.appt_request.requested:
+            appt_event_id = emit_event(
+                tenant_id=body.tenant_id,
+                rid=body.rid,
+                event_type="postcall.appt_request",
+                payload_dict={
+                    "tenant_id": body.tenant_id,
+                    "rid": body.rid,
+                    "ai_mode": body.ai_mode,
+                    **parsed.appt_request.model_dump(),
+                },
+                idempotency_key=f"{base_idem}:appt_request",
+            )
+            emitted["appt_request"] = appt_event_id
 
     return {"ok": True, "rid": body.rid, "tenant_id": body.tenant_id, "events": emitted}
 

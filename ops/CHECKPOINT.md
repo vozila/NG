@@ -12,6 +12,7 @@
 - Flow A now persists transcript text on `flow_a.transcript_completed` payloads (`transcript` + `transcript_len`), enabling post-call extraction reads.
 - Post-call reconcile runner is available behind feature/runtime gates (`VOZ_FEATURE_POSTCALL_RECONCILE`, `VOZ_POSTCALL_RECONCILE_ENABLED`).
 - Owner insights summary endpoint is available behind `VOZ_FEATURE_OWNER_INSIGHTS`.
+- Reconcile runner now scans recent stopped calls first and uses bounded concurrency for extraction triggers.
 
 ## Last known good
 - Flow A OpenAI Realtime bridge: audio deltas received + Twilio μ-law frames sent + caller hears speech.
@@ -26,6 +27,7 @@
 - Known-good reconcile + insights evidence:
   - `/admin/postcall/reconcile` returns attempted/created/skipped/errors counts
   - `/owner/insights/summary` returns deterministic tenant-scoped counts and latest rid
+  - reconcile honors bounded concurrency (`VOZ_POSTCALL_RECONCILE_CONCURRENCY`) without unbounded fan-out
 
 ## Next actions
 - Add/verify feature gating via `VOZ_FEATURE_<NAME>_AI_MODES`.

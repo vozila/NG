@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
 from core.app import create_app
-from core.db import emit_event, query_events_for_rid
+from core.db import emit_event, get_conn, query_events_for_rid
 from features import postcall_reconcile
 
 
@@ -219,3 +220,57 @@ def test_validated_self_base_url_rejects_untrusted_host(monkeypatch) -> None:
     monkeypatch.delenv("RENDER_INTERNAL_HOSTNAME", raising=False)
     with pytest.raises(RuntimeError, match="host not allowed"):
         postcall_reconcile._validated_self_base_url()
+
+
+def test_postcall_reconcile_recent_first_limit(monkeypatch, tmp_path) -> None:
+    _set_env(monkeypatch, db_path=str(tmp_path / "reconcile_recent.sqlite3"))
+    _seed_call_stopped(tenant_id="tenant_demo", rid="rid-old", ai_mode="owner")
+    _seed_call_stopped(tenant_id="tenant_demo", rid="rid-new", ai_mode="owner")
+
+    # Force deterministic ordering by ts so limit=1 should pick rid-new.
+    with get_conn() as conn:
+        conn.execute("UPDATE events SET ts = 100 WHERE rid = 'rid-old' AND event_type = 'flow_a.call_stopped'")
+        conn.execute("UPDATE events SET ts = 200 WHERE rid = 'rid-new' AND event_type = 'flow_a.call_stopped'")
+        conn.commit()
+
+    seen: list[str] = []
+
+    async def _fake_trigger_extract(*, tenant_id: str, rid: str, ai_mode: str, idempotency_key: str):
+        seen.append(rid)
+        return 200, '{"ok":true}'
+
+    monkeypatch.setattr(postcall_reconcile, "_trigger_extract", _fake_trigger_extract)
+    client = TestClient(create_app())
+    resp = client.post(
+        "/admin/postcall/reconcile",
+        json={"tenant_id": "tenant_demo", "since_ts": 0, "limit": 1},
+        headers=_auth(),
+    )
+    assert resp.status_code == 200
+    assert seen == ["rid-new"]
+
+
+def test_postcall_reconcile_bounded_concurrency(monkeypatch, tmp_path) -> None:
+    _set_env(monkeypatch, db_path=str(tmp_path / "reconcile_concurrency.sqlite3"))
+    monkeypatch.setenv("VOZ_POSTCALL_RECONCILE_CONCURRENCY", "2")
+    for i in range(5):
+        _seed_call_stopped(tenant_id="tenant_demo", rid=f"rid-{i}", ai_mode="owner")
+
+    state = {"active": 0, "max_active": 0}
+
+    async def _fake_trigger_extract(*, tenant_id: str, rid: str, ai_mode: str, idempotency_key: str):
+        state["active"] += 1
+        state["max_active"] = max(state["max_active"], state["active"])
+        await asyncio.sleep(0.01)
+        state["active"] -= 1
+        return 200, '{"ok":true}'
+
+    monkeypatch.setattr(postcall_reconcile, "_trigger_extract", _fake_trigger_extract)
+    client = TestClient(create_app())
+    resp = client.post(
+        "/admin/postcall/reconcile",
+        json={"tenant_id": "tenant_demo", "since_ts": 0, "limit": 5},
+        headers=_auth(),
+    )
+    assert resp.status_code == 200
+    assert state["max_active"] <= 2
