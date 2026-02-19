@@ -26,5 +26,34 @@ Fix:
 - Send `clear` only when a true user barge-in starts (`speech_started` boundary), not on generic state changes.
 - Add debounce/guards so noise does not trigger unnecessary clears.
 
+## Shared line access codes / mode selection
+
+### 4) The access code selects `ai_mode` — keep naming canonical
+Symptom:
+- Mode-specific prompts/voices never activate, or everything falls back to customer mode.
+
+Fix:
+- Ensure the Twilio Stream contract uses **`ai_mode`** with allowed values exactly:
+  - `customer`
+  - `owner`
+- Treat missing/unknown values as `customer` (fail closed).
+
+### 5) Dual-mode requires explicit enablement
+Symptom:
+- Customer codes never work; only owner codes validate.
+
+Fix:
+- Set `VOZ_DUAL_MODE_ACCESS=1`, then set either:
+  - preferred: `VOZ_ACCESS_CODE_ROUTING_JSON` (code → `{tenant_id, ai_mode}`)
+  - or fallback: `VOZ_CLIENT_ACCESS_CODE_MAP_JSON` + `VOZ_ACCESS_CODE_MAP_JSON`
+
+### 6) TwiML Gather action URLs must XML-escape '&'
+Symptom:
+- Twilio rejects the Gather action URL or the access-code handler never receives `rid/attempt`.
+
+Fix:
+- Use `&amp;` separators inside XML attributes (e.g., `action="...?...&amp;attempt=0&amp;rid=..."`).
+
 ## Observability (general)
 - Logging inside 20ms audio loops is not “free”. Keep per-frame logs OFF; use first-delta breadcrumbs only.
+

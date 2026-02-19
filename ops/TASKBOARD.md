@@ -6,7 +6,7 @@
 - [x] TASK-0100 — Voice Flow A WS skeleton + waiting-audio hooks (Slice A+B)
 - [x] TASK-0101 — Shared line access gate (out-of-band HTTP FSM)
 - [x] TASK-0102 — WhatsApp inbound adapter stub
-- [x] Flow A waiting/thinking audio lane foundation: `WaitingAudioController` + aux lane + tests
+- [x] Flow A waiting/thinking audio lane foundation: `WaitingAudioController` + aux lane + tests  
       (chime default OFF via `VOICE_WAIT_CHIME_ENABLED=0`)
 - [x] TASK-0201.5 — Flow A audible assistant speech (Realtime audio out)
       - OpenAI emits `response.output_audio.delta`
@@ -19,28 +19,38 @@
 - [x] Flow A Realtime session update accepted + transcript-driven response loop working
       - `session.created/session.updated` accepted
       - `speech_started` → `transcript.completed` → `response.create` → `response.created/done`
-
-## NOW (next high-leverage work)
-- [ ] TASK-0203 — Dual-mode access gating (`ai_mode=customer|owner`) on the shared number
+- [x] TASK-0203 — Dual-mode access gating (`ai_mode=customer|owner`) on the shared number
       - Generic prompt: “enter your 8-digit access code”
       - Access code resolves `{tenant_id, ai_mode}`
       - Pass `ai_mode` through Twilio Stream customParameters
-- [ ] TASK-0204 — Mode policy enforcement (MVP env-only)
-      - Mode-specific instructions by `(tenant_id, ai_mode)`
-      - Mode-aware feature/skill allowlists via `VOZ_FEATURE_<NAME>_AI_MODES` (fail closed)
-- [ ] TASK-0204.1 — Back-compat and routing config for access-code mode selection
+- [x] TASK-0204.1 — Back-compat and routing config for access-code mode selection
       - Preferred `VOZ_ACCESS_CODE_ROUTING_JSON` for code -> `{tenant_id, ai_mode}`
       - Keep `VOZ_ACCESS_CODE_MAP_JSON` as legacy owner map
       - Optional `VOZ_CLIENT_ACCESS_CODE_MAP_JSON` for customer codes
+- [x] TASK-0204 — Flow A `ai_mode` policy selection (MVP env-only)
+      - Mode-specific instructions/voice selected by `(tenant_id, ai_mode)` via env-config JSON
+      - Flow A logs include `ai_mode=...` for routing clarity
+
+## NOW (next high-leverage work)
+- [ ] TASK-0207 — Mode-aware capability gating (MVP env-only; **fail closed**)
+      - Per-feature allowlist: `VOZ_FEATURE_<NAME>_AI_MODES="customer,owner"` (or single)
+      - Owner-only features/skills must reject customer mode deterministically
+      - Default behavior for unknown modes: treat as `customer`
+- [ ] TASK-0205 — Owner-mode analytics foundations (owner-only)
+      - QuerySpec schema (strict JSON) + deterministic executor (SQL/DB reads only)
+      - Must not run in Flow A hot path; results summarized out-of-band
+- [ ] TASK-0206 — Customer-mode capabilities (MVP)
+      - Customer greeting + customer protocols
+      - Lead capture / appointment request capture (domain stubs acceptable)
+      - Notifications (SMS/email) behind feature flags
 - [ ] Flow A: refine barge-in / clear semantics (anti-regression)
       - Ensure `TWILIO_CLEAR_SENT` only on actual `speech_started`
-      - Add debounce/guards so we don’t flush model audio unnecessarily
       - Add deterministic tests for: (a) user interrupts mid-response, (b) silence/noise edge cases
-- [ ] Unified engine router interface (shared across voice/whatsapp/webui)
 
 ## NEXT (blocked / staged)
-- [ ] Owner analytics (owner-mode only) — QuerySpec → deterministic SQL (blocked by DB readiness + schema)
-- [ ] Client-mode domain features (orders / appointment requests) with notifications (blocked by domain persistence)
+- [ ] Unified engine router interface (shared across voice/whatsapp/portal)
+- [ ] Portal chat goal wizard (VOZ-PRD-GOALS-001) — out-of-band planning + deterministic playbooks
+- [ ] Capacity Agent load profiles against staging (never prod by default)
 
 ## Guardrails (do not break)
 - No cross-feature imports.
@@ -52,3 +62,5 @@
 - `VOZ_FLOW_A_OPENAI_BRIDGE=0` disables OpenAI bridge immediately (Twilio stream still works).
 - `VOZ_FEATURE_VOICE_FLOW_A=0` disables WS endpoint entirely.
 - `VOZ_FEATURE_SHARED_LINE_ACCESS=0` disables shared-line routing/access gate.
+- `VOZ_DUAL_MODE_ACCESS=0` reverts to legacy (owner-only) access-code behavior.
+

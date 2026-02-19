@@ -1,113 +1,31 @@
-# Vozlia NG — JOURNAL (append-only)
+# JOURNAL (append-only) — Vozlia NG
 
-## 2026-02-15 — Day 0 scaffolding
-- Goal: repo skeleton + loader + regression endpoint + sample feature.
-- Known issue: ensure `ruff` is installed in dev/CI so `python -m ruff check .` runs.
-- Next: run quality gates and capture ≤5 lines evidence into this journal.
-## 2026-02-15 — Day 1 merges (Voice + Access + WhatsApp)
+**Timezone:** America/New_York
 
-Merged into `main` (merge commits):
-- TASK-0101 access gate: `6b7c9e5`
-- TASK-0102 WhatsApp inbound: `f76748e`
-- TASK-0100 Voice Flow A skeleton: `9a547a4`
+## 2026-02-18 — Flow A audio out milestone (TASK-0201.5)
 
-New feature flags (default OFF):
-- `VOZ_FEATURE_ACCESS_GATE`
-- `VOZ_FEATURE_WHATSAPP_IN`
-- `VOZ_FEATURE_VOICE_FLOW_A`
+What changed:
+- Updated Flow A to request valid modalities (`['audio','text']`) and handle `response.output_audio.delta`.
+- Added first-delta and first-frame breadcrumbs (debug-only) to prove audio is flowing to Twilio.
+- Confirmed caller hears speech.
 
-Quality evidence (post-merge):
-- compileall ✅
-- ruff ✅
-- pytest ✅ (11 tests)
-- regression ✅ status ok (writes `ops/QUALITY_REPORTS/latest_regression.json`; do not auto-commit updates)
-
-Automation:
-- `bash scripts/run_gates_record.sh` produces uploadable log + summary + timestamped regression snapshot.
-- `bash scripts/clean_generated.sh` reverts rolling report + clears caches for clean commits.
-- `bash scripts/merge_with_gates.sh <branch> "<merge message>"` merges + runs gates + pushes.
-
-## 2026-02-17 — Flow A waiting/thinking audio lane (anti-regression foundation)
-
-What was added:
-- `WaitingAudioController` integrated into Flow A WS path with an aux lane concept.
-- Chime default remains OFF: `VOICE_WAIT_CHIME_ENABLED=0`.
-- Tests added to ensure aux does not interfere with main lane and barge-in stops aux immediately.
-
-Why:
-- We explicitly do NOT want “thinking sounds” to fight assistant speech buffers or barge-in.
-- Two lanes + simple precedence rules are safer than mixing audio sources.
-
-Next:
-- Implement OpenAI Realtime bridge as main lane source (flagged).
-- Add deterministic pacing and backlog caps for outbound audio.
-
-## 2026-02-18 — TASK-0200 core DB event store scaffold
-What was added:
-- New module `core/db.py` with SQLite DB bootstrap (`VOZ_DB_PATH`, default `ops/vozlia_ng.sqlite3`), idempotent schema init, and tenant-scoped event APIs: `emit_event(...)` and `query_events(...)`.
-- Schema includes `tenants` and canonical append-only `events` (`event_id`, `tenant_id`, `rid`, `event_type`, `ts`, `payload_json`, `trace_id`, `idempotency_key`) plus indexes on `(tenant_id, ts)` and `(tenant_id, event_type, ts)`.
-- New tests in `tests/test_db_event_store.py` for schema creation, insert/query, tenant isolation, and idempotency-key behavior.
-
-Env vars:
-- `VOZ_DB_PATH` (default `ops/vozlia_ng.sqlite3`; dev fallback can be `:memory:`).
-
-Rollback notes:
-- Keep DB layer dormant by not importing/calling it from feature hot paths until explicitly enabled.
-- For non-persistent local runs, set `VOZ_DB_PATH=:memory:`.
-- Revert the task commit or stop calling `core.db` APIs (no migrations introduced).
-
-## 2026-02-18 — TASK-0201.5 Flow A audible speech (Realtime audio out)
-
-Outcome:
-- Confirmed end-to-end audible assistant speech on the shared line.
-- OpenAI Realtime emitted `response.output_audio.delta` and Twilio received paced μ-law frames.
-
-Key learning (root cause of prior “no audio deltas”):
-- The Realtime server rejected `response.modalities=['audio']` with `invalid_value`.
-- Supported combinations were `['text']` and `['audio','text']`.
-- Fix: request `['audio','text']` (ideally driven from `session.output_modalities`).
-
-Evidence (≤5 log lines):
-- `OPENAI_RESPONSE_CREATE_SENT rid=1 modalities=['audio', 'text']`
-- `OPENAI_RESPONSE_CREATED id=resp_DAjQJUH46ITierNlCpbeU`
-- `OPENAI_AUDIO_DELTA_FIRST response_id=resp_DAjQJUH46ITierNlCpbeU bytes=800`
-- `TWILIO_MAIN_FRAME_SENT first=1 response_id=resp_DAjQJUH46ITierNlCpbeU bytes=160 q_main=4`
-- Caller heard synthesized speech.
+Proof logs (<=5):
+- `OPENAI_RESPONSE_CREATE_SENT rid=1 modalities=['audio','text']`
+- `OPENAI_RESPONSE_CREATED id=resp_...`
+- `OPENAI_AUDIO_DELTA_FIRST response_id=resp_... bytes=800`
+- `TWILIO_MAIN_FRAME_SENT first=1 response_id=resp_... bytes=160 q_main=4`
+- Caller heard speech.
 
 Rollback:
-- `VOZ_FLOW_A_OPENAI_BRIDGE=0` disables OpenAI bridge (Twilio stream still works).
+- `VOZ_FLOW_A_OPENAI_BRIDGE=0`
 
-## 2026-02-18 — Added dual-mode requirement (client vs owner)
+## 2026-02-18 — TASK-0204 (actor-mode policy) writeback
 
-New requirement:
-- Each tenant supports two interaction modes:
-  - `actor_mode=client` (customer-facing protocol + customer-only capabilities)
-  - `actor_mode=owner` (owner protocol + analytics/admin capabilities)
-
-Plan updates:
-- Build plan updated to include access-code → `{tenant_id, actor_mode}` routing and mode-aware feature/skill gating.
-- Taskboard updated with achieved Flow A audio output and next tasks for dual-mode access + policy enforcement.
-
-Quality gates (local ZIP snapshot):
-- compileall ✅
-- ruff ✅
-- pytest ✅
-
-## 2026-02-18 — TASK-0204 Flow A actor_mode policy (AUTO-SUMMARY PACK)
 What changed:
-- Added `actor_mode` policy resolver in `features/voice_flow_a.py` with kill-switch `VOZ_FLOW_A_ACTOR_MODE_POLICY` (default OFF).
-- Flow A now reads `start.customParameters.actor_mode`, validates to `client|owner` with fail-closed default `client`, and selects mode-specific `voice`/`instructions` using:
-  - `VOZ_TENANT_MODE_POLICY_JSON` (tenant+mode preferred)
-  - mode env fallbacks (`VOZ_OPENAI_REALTIME_INSTRUCTIONS_CLIENT|OWNER`, `VOZ_OPENAI_REALTIME_VOICE_CLIENT|OWNER`)
-  - existing globals (`VOZ_OPENAI_REALTIME_INSTRUCTIONS`, `VOZ_OPENAI_REALTIME_VOICE`)
-- `session.update` uses the selected policy values; transport/session schema remains unchanged.
-- Added debug breadcrumbs (debug-only):
-  - `TWILIO_WS_START ... actor_mode=...`
-  - `VOICE_FLOW_A_START ... actor_mode=...`
-  - `VOICE_MODE_SELECTED tenant_id=... actor_mode=... voice=...`
-- Added resolver unit tests in `tests/test_voice_flow_a.py` for unknown-mode defaulting, tenant JSON owner override, mode-env fallback, and policy kill-switch OFF behavior.
+- Added mode policy selection for Flow A based on `actor_mode` (now sourced from `ai_mode`).
+- Added env-only tenant policy JSON to select different voice/instructions for owner vs client.
 
-Quality evidence:
+Tests:
 - `./.venv/bin/python -m compileall .` ✅
 - `./.venv/bin/python -c "import features.voice_flow_a"` ✅
 - `./.venv/bin/ruff check .` ✅
@@ -129,3 +47,16 @@ Proof logs (<=5):
 - `OPENAI_AUDIO_DELTA_FIRST ...`
 - `TWILIO_MAIN_FRAME_SENT first=1 ... bytes=160`
 - Caller heard speech.
+
+## 2026-02-18 — TASK-0203 + TASK-0204 completion sync (ai_mode) + memory spine writeback
+What changed:
+- Marked TASK-0203 as DONE and standardized terminology on `ai_mode=customer|owner` (no more `actor_mode` in shared-line contract).
+- Updated `ops/REFERENCE_PACKS/shared_line_access.md` to reflect the real env surface: `VOZ_DUAL_MODE_ACCESS`, `VOZ_ACCESS_CODE_ROUTING_JSON`, `VOZ_CLIENT_ACCESS_CODE_MAP_JSON`, `VOZ_ACCESS_CODE_MAP_JSON`.
+- Updated `ops/TASKBOARD.md` + `ops/CHECKPOINT.md` to reflect tasks complete and moved the next gating work into a new TASK-0207.
+- Updated `ops/KNOWN_GOTCHAS.md` with the ai_mode naming + TwiML escaping pitfalls.
+
+Proof (<=5):
+- `python -m compileall .` ✅
+- `uvx ruff check .` ✅
+- `pytest -q` ✅ (`23 passed`)
+
