@@ -20,7 +20,7 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException, Query
 
 from core.config import is_debug
-from core.db import get_conn, query_events_for_rid
+from core.db import get_conn
 from core.logging import logger
 
 router = APIRouter(prefix="/owner/inbox", tags=["owner-inbox"])
@@ -98,38 +98,51 @@ def _fetch_source_rows(*, tenant_id: str, event_type: str, since_ts: int, until_
     return out
 
 
-def _latest_payload_field(*, tenant_id: str, rid: str, event_type: str, field: str) -> Any:
-    rows = query_events_for_rid(tenant_id=tenant_id, rid=rid, event_type=event_type, limit=50)
-    if not rows:
-        return None
-    payload = rows[-1].get("payload")
-    if not isinstance(payload, dict):
-        return None
-    return payload.get(field)
+def _latest_fields_for_rids(
+    *,
+    tenant_id: str,
+    rids: list[str],
+    event_type: str,
+    fields: list[str],
+) -> dict[str, dict[str, Any]]:
+    if not rids:
+        return {}
+    placeholders = ",".join(["?"] * len(rids))
+    params: list[Any] = [tenant_id, event_type, *rids]
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT rid, payload_json, ts, event_id
+            FROM events
+            WHERE tenant_id = ? AND event_type = ? AND rid IN ({placeholders})
+            ORDER BY ts DESC, event_id DESC
+            """,
+            params,
+        ).fetchall()
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        rid = str(row["rid"])
+        if rid in out:
+            continue
+        payload = json.loads(str(row["payload_json"]))
+        if not isinstance(payload, dict):
+            continue
+        out[rid] = {field: payload.get(field) for field in fields}
+    return out
 
 
-def _normalize_lead_item(*, tenant_id: str, row: dict[str, Any]) -> dict[str, Any]:
+def _normalize_lead_item(
+    *,
+    row: dict[str, Any],
+    summary_by_rid: dict[str, dict[str, Any]],
+    caller_by_rid: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
     rid = str(row.get("rid") or "")
     payload = row.get("payload")
     p = payload if isinstance(payload, dict) else {}
-    summary_headline = _latest_payload_field(
-        tenant_id=tenant_id,
-        rid=rid,
-        event_type="postcall.summary",
-        field="headline",
-    )
-    from_number = _latest_payload_field(
-        tenant_id=tenant_id,
-        rid=rid,
-        event_type="flow_a.call_started",
-        field="from_number",
-    )
-    to_number = _latest_payload_field(
-        tenant_id=tenant_id,
-        rid=rid,
-        event_type="flow_a.call_started",
-        field="to_number",
-    )
+    summary_headline = summary_by_rid.get(rid, {}).get("headline")
+    from_number = caller_by_rid.get(rid, {}).get("from_number")
+    to_number = caller_by_rid.get(rid, {}).get("to_number")
     return {
         "rid": rid,
         "ts": int(row.get("ts") or 0),
@@ -143,28 +156,18 @@ def _normalize_lead_item(*, tenant_id: str, row: dict[str, Any]) -> dict[str, An
     }
 
 
-def _normalize_appt_item(*, tenant_id: str, row: dict[str, Any]) -> dict[str, Any]:
+def _normalize_appt_item(
+    *,
+    row: dict[str, Any],
+    summary_by_rid: dict[str, dict[str, Any]],
+    caller_by_rid: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
     rid = str(row.get("rid") or "")
     payload = row.get("payload")
     p = payload if isinstance(payload, dict) else {}
-    summary_headline = _latest_payload_field(
-        tenant_id=tenant_id,
-        rid=rid,
-        event_type="postcall.summary",
-        field="headline",
-    )
-    from_number = _latest_payload_field(
-        tenant_id=tenant_id,
-        rid=rid,
-        event_type="flow_a.call_started",
-        field="from_number",
-    )
-    to_number = _latest_payload_field(
-        tenant_id=tenant_id,
-        rid=rid,
-        event_type="flow_a.call_started",
-        field="to_number",
-    )
+    summary_headline = summary_by_rid.get(rid, {}).get("headline")
+    from_number = caller_by_rid.get(rid, {}).get("from_number")
+    to_number = caller_by_rid.get(rid, {}).get("to_number")
     return {
         "rid": rid,
         "ts": int(row.get("ts") or 0),
@@ -196,7 +199,27 @@ async def owner_inbox_leads(
         until_ts=end,
         limit=limit,
     )
-    items = [_normalize_lead_item(tenant_id=tenant_id, row=row) for row in rows]
+    rids = [str(row.get("rid") or "") for row in rows if str(row.get("rid") or "").strip()]
+    summary_by_rid = _latest_fields_for_rids(
+        tenant_id=tenant_id,
+        rids=rids,
+        event_type="postcall.summary",
+        fields=["headline"],
+    )
+    caller_by_rid = _latest_fields_for_rids(
+        tenant_id=tenant_id,
+        rids=rids,
+        event_type="flow_a.call_started",
+        fields=["from_number", "to_number"],
+    )
+    items = [
+        _normalize_lead_item(
+            row=row,
+            summary_by_rid=summary_by_rid,
+            caller_by_rid=caller_by_rid,
+        )
+        for row in rows
+    ]
     _dbg(f"OWNER_INBOX_LEADS tenant_id={tenant_id} since_ts={start} until_ts={end} count={len(items)}")
     return {"ok": True, "tenant_id": tenant_id, "items": items}
 
@@ -219,7 +242,27 @@ async def owner_inbox_appt_requests(
         until_ts=end,
         limit=limit,
     )
-    items = [_normalize_appt_item(tenant_id=tenant_id, row=row) for row in rows]
+    rids = [str(row.get("rid") or "") for row in rows if str(row.get("rid") or "").strip()]
+    summary_by_rid = _latest_fields_for_rids(
+        tenant_id=tenant_id,
+        rids=rids,
+        event_type="postcall.summary",
+        fields=["headline"],
+    )
+    caller_by_rid = _latest_fields_for_rids(
+        tenant_id=tenant_id,
+        rids=rids,
+        event_type="flow_a.call_started",
+        fields=["from_number", "to_number"],
+    )
+    items = [
+        _normalize_appt_item(
+            row=row,
+            summary_by_rid=summary_by_rid,
+            caller_by_rid=caller_by_rid,
+        )
+        for row in rows
+    ]
     _dbg(f"OWNER_INBOX_APPTS tenant_id={tenant_id} since_ts={start} until_ts={end} count={len(items)}")
     return {"ok": True, "tenant_id": tenant_id, "items": items}
 

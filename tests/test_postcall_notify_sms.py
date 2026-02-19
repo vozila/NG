@@ -107,6 +107,63 @@ def test_postcall_notify_sms_non_dry_emits_sms_sent_and_idempotent(monkeypatch, 
     assert len(sent_events) == 1
 
 
+def test_postcall_notify_sms_delivery_unknown_prevents_duplicate_resend(monkeypatch, tmp_path) -> None:
+    _set_env(monkeypatch, db_path=str(tmp_path / "notify_unknown.sqlite3"))
+    tenant = "tenant_demo"
+    rid = "rid-unknown"
+    emit_event(tenant, rid, "postcall.lead", {"tenant_id": tenant, "rid": rid, "qualified": True})
+
+    from features import postcall_notify_sms
+
+    sends: list[str] = []
+
+    def _fake_send_sms(*, to_number: str, body: str):
+        sends.append(body)
+        return True, '{"sid":"SM_UNKNOWN"}'
+
+    original_emit_event = postcall_notify_sms.emit_event
+
+    def _fake_emit_event(
+        tenant_id: str,
+        rid: str,
+        event_type: str,
+        payload_dict: dict,
+        trace_id=None,
+        idempotency_key=None,
+    ):
+        if event_type == "notify.sms_sent":
+            raise RuntimeError("simulated db failure")
+        return original_emit_event(
+            tenant_id=tenant_id,
+            rid=rid,
+            event_type=event_type,
+            payload_dict=payload_dict,
+            trace_id=trace_id,
+            idempotency_key=idempotency_key,
+        )
+
+    monkeypatch.setattr(postcall_notify_sms, "_send_sms", _fake_send_sms)
+    monkeypatch.setattr(postcall_notify_sms, "emit_event", _fake_emit_event)
+    client = TestClient(create_app())
+
+    first = client.post(
+        "/admin/postcall/notify/sms",
+        headers=_auth(),
+        json={"tenant_id": tenant, "since_ts": 0, "limit": 50, "dry_run": False},
+    )
+    second = client.post(
+        "/admin/postcall/notify/sms",
+        headers=_auth(),
+        json={"tenant_id": tenant, "since_ts": 0, "limit": 50, "dry_run": False},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert len(sends) == 1
+    unknown_events = query_events_for_rid(tenant, rid, event_type="notify.sms_delivery_unknown", limit=10)
+    assert len(unknown_events) == 1
+
+
 def test_postcall_notify_sms_tenant_isolation(monkeypatch, tmp_path) -> None:
     _set_env(monkeypatch, db_path=str(tmp_path / "notify_tenant.sqlite3"))
     emit_event("tenant_demo", "rid-a", "postcall.lead", {"tenant_id": "tenant_demo", "rid": "rid-a"})

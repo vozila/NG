@@ -37,6 +37,7 @@ Admin out-of-band notifier that turns new post-call lead/appt artifacts into own
    - writes:
      - `notify.sms_sent` (idempotency key `notify_sms:{rid}`)
      - `notify.sms_failed` on send failure
+     - `notify.sms_delivery_unknown` if provider send succeeds but DB write for `notify.sms_sent` fails
 
 ## Required env
 - Auth:
@@ -55,6 +56,7 @@ Admin out-of-band notifier that turns new post-call lead/appt artifacts into own
 - Missing tenant destination => `400`
 - Missing Twilio config on non-dry run => `503`
 - `limit > 200` => `422`
+- If persistence fails after successful provider send, endpoint records `notify.sms_delivery_unknown` and future runs skip that rid to avoid duplicate SMS sends.
 
 ## Rollback
 - Runtime off: `VOZ_POSTCALL_NOTIFY_SMS_ENABLED=0`

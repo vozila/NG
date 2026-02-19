@@ -131,7 +131,10 @@ def _fetch_candidates(*, tenant_id: str, since_ts: int, limit: int) -> list[dict
 
 def _already_sent(*, tenant_id: str, rid: str) -> bool:
     rows = query_events_for_rid(tenant_id=tenant_id, rid=rid, event_type="notify.sms_sent", limit=1)
-    return bool(rows)
+    if rows:
+        return True
+    unknown = query_events_for_rid(tenant_id=tenant_id, rid=rid, event_type="notify.sms_delivery_unknown", limit=1)
+    return bool(unknown)
 
 
 def _summary_headline(*, tenant_id: str, rid: str) -> str | None:
@@ -253,34 +256,60 @@ async def postcall_notify_sms(
 
         ok, detail = _send_sms(to_number=destination, body=sms_text)
         if ok:
-            emit_event(
-                tenant_id=body.tenant_id,
-                rid=rid,
-                event_type="notify.sms_sent",
-                payload_dict={
-                    "tenant_id": body.tenant_id,
-                    "rid": rid,
-                    "to_number": destination,
-                    "source_event_type": event_type,
-                    "message": sms_text,
-                },
-                idempotency_key=f"notify_sms:{rid}",
-            )
-            sent += 1
+            try:
+                emit_event(
+                    tenant_id=body.tenant_id,
+                    rid=rid,
+                    event_type="notify.sms_sent",
+                    payload_dict={
+                        "tenant_id": body.tenant_id,
+                        "rid": rid,
+                        "to_number": destination,
+                        "source_event_type": event_type,
+                        "message": sms_text,
+                    },
+                    idempotency_key=f"notify_sms:{rid}",
+                )
+                sent += 1
+            except Exception as e:
+                # SMS provider accepted send but persistence failed; mark as terminal-unknown
+                # so retries do not duplicate owner notifications.
+                try:
+                    emit_event(
+                        tenant_id=body.tenant_id,
+                        rid=rid,
+                        event_type="notify.sms_delivery_unknown",
+                        payload_dict={
+                            "tenant_id": body.tenant_id,
+                            "rid": rid,
+                            "to_number": destination,
+                            "source_event_type": event_type,
+                            "message": sms_text,
+                            "provider_response": detail,
+                            "error": repr(e),
+                        },
+                        idempotency_key=f"notify_sms_unknown:{rid}",
+                    )
+                except Exception:
+                    pass
+                errors += 1
         else:
-            emit_event(
-                tenant_id=body.tenant_id,
-                rid=rid,
-                event_type="notify.sms_failed",
-                payload_dict={
-                    "tenant_id": body.tenant_id,
-                    "rid": rid,
-                    "to_number": destination,
-                    "source_event_type": event_type,
-                    "error": detail,
-                },
-                idempotency_key=f"notify_sms_failed:{rid}:{int(time.time())}",
-            )
+            try:
+                emit_event(
+                    tenant_id=body.tenant_id,
+                    rid=rid,
+                    event_type="notify.sms_failed",
+                    payload_dict={
+                        "tenant_id": body.tenant_id,
+                        "rid": rid,
+                        "to_number": destination,
+                        "source_event_type": event_type,
+                        "error": detail,
+                    },
+                    idempotency_key=f"notify_sms_failed:{rid}:{int(time.time())}",
+                )
+            except Exception:
+                pass
             errors += 1
 
     _dbg(
