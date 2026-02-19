@@ -228,6 +228,14 @@ def _audio_queue_bytes(buffers: OutgoingAudioBuffers) -> int:
     return (len(buffers.main) * FRAME_BYTES) + (len(buffers.aux) * FRAME_BYTES) + len(buffers.remainder)
 
 
+def _is_sender_underrun_state(*, response_state: dict[str, Any], buffers: OutgoingAudioBuffers) -> bool:
+    active = response_state.get("active_response_id")
+    if isinstance(active, str) and active:
+        return True
+    # If there are playable main frames queued, sender should not be idle.
+    return bool(buffers.main)
+
+
 def _build_openai_session_update(*, voice: str, instructions: str | None) -> dict[str, Any]:
     """
     IMPORTANT:
@@ -349,9 +357,12 @@ async def _twilio_sender_loop(
     stats_started = time.monotonic()
     frames_sent = 0
     underruns = 0
+    idle_ticks = 0
+    prebuf_waits = 0
     late_ms_max = 0.0
     next_due = time.monotonic() + FRAME_SLEEP_S
     prebuf_complete_logged_for_rid: str | None = None
+    prebuf_open_for_rid: str | None = None
 
     while True:
         sid = stream_sid_ref.get("streamSid")
@@ -362,13 +373,45 @@ async def _twilio_sender_loop(
         frame: bytes | None = None
         lane = "none"
         if buffers.main:
+            lane = "main"
+            rid = response_state.get("active_response_id")
+            if (
+                isinstance(rid, str)
+                and rid
+                and prebuffer_frames > 0
+                and prebuf_open_for_rid != rid
+                and len(buffers.main) < prebuffer_frames
+            ):
+                prebuf_waits += 1
+                now = time.monotonic()
+                if now >= next_due:
+                    late_ms_max = max(late_ms_max, (now - next_due) * 1000.0)
+                    next_due = now + FRAME_SLEEP_S
+                if now - stats_started >= stats_every_s:
+                    prebuf = True
+                    _dbg(
+                        f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
+                        f"frames_sent={frames_sent} underruns={underruns} idle_ticks={idle_ticks} "
+                        f"prebuf_waits={prebuf_waits} late_ms_max={late_ms_max:.1f} prebuf={prebuf}"
+                    )
+                    stats_started = now
+                    frames_sent = 0
+                    underruns = 0
+                    idle_ticks = 0
+                    prebuf_waits = 0
+                    late_ms_max = 0.0
+                await asyncio.sleep(0.01)
+                continue
             frame = buffers.main.popleft()
             lane = "main"
         elif wait_ctl.aux_enabled and buffers.aux:
             frame = buffers.aux.popleft()
             lane = "aux"
         else:
-            underruns += 1
+            if _is_sender_underrun_state(response_state=response_state, buffers=buffers):
+                underruns += 1
+            else:
+                idle_ticks += 1
             now = time.monotonic()
             if now >= next_due:
                 late_ms_max = max(late_ms_max, (now - next_due) * 1000.0)
@@ -377,12 +420,15 @@ async def _twilio_sender_loop(
                 prebuf = bool(response_state.get("active_response_id")) and len(buffers.main) < prebuffer_frames
                 _dbg(
                     f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
-                    f"frames_sent={frames_sent} underruns={underruns} "
+                    f"frames_sent={frames_sent} underruns={underruns} idle_ticks={idle_ticks} "
+                    f"prebuf_waits={prebuf_waits} "
                     f"late_ms_max={late_ms_max:.1f} prebuf={prebuf}"
                 )
                 stats_started = now
                 frames_sent = 0
                 underruns = 0
+                idle_ticks = 0
+                prebuf_waits = 0
                 late_ms_max = 0.0
             await asyncio.sleep(0.01)
             continue
@@ -400,6 +446,8 @@ async def _twilio_sender_loop(
         if lane == "main":
             rid = response_state.get("active_response_id")
             if isinstance(rid, str):
+                if prebuf_open_for_rid != rid:
+                    prebuf_open_for_rid = rid
                 if rid != prebuf_complete_logged_for_rid and len(buffers.main) >= prebuffer_frames:
                     _dbg("Prebuffer complete; starting to send audio to Twilio")
                     prebuf_complete_logged_for_rid = rid
@@ -414,12 +462,15 @@ async def _twilio_sender_loop(
             prebuf = bool(response_state.get("active_response_id")) and len(buffers.main) < prebuffer_frames
             _dbg(
                 f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
-                f"frames_sent={frames_sent} underruns={underruns} "
+                f"frames_sent={frames_sent} underruns={underruns} idle_ticks={idle_ticks} "
+                f"prebuf_waits={prebuf_waits} "
                 f"late_ms_max={late_ms_max:.1f} prebuf={prebuf}"
             )
             stats_started = now
             frames_sent = 0
             underruns = 0
+            idle_ticks = 0
+            prebuf_waits = 0
             late_ms_max = 0.0
 
         next_due = now + FRAME_SLEEP_S
@@ -467,6 +518,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
         "seen_audio_ids": set(),
         "logged_twilio_main_frame_ids": set(),
         "logged_done_no_audio_ids": set(),
+        "processed_response_done_ids": set(),
     }
 
     turn_seq = 0
@@ -721,6 +773,13 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 response = evt.get("response") if isinstance(evt.get("response"), dict) else {}
                 rid = response.get("id")
                 out_mods = response.get("output_modalities")
+                if isinstance(rid, str):
+                    processed_done_ids = response_state.get("processed_response_done_ids")
+                    if isinstance(processed_done_ids, set) and rid in processed_done_ids:
+                        _dbg(f"OPENAI_RESPONSE_DONE_DUPLICATE id={rid}")
+                        continue
+                    if isinstance(processed_done_ids, set):
+                        processed_done_ids.add(rid)
                 _dbg(f"OPENAI_RESPONSE_DONE id={rid} output_modalities={out_mods}")
                 if isinstance(rid, str):
                     started = response_started_at.get(rid)
@@ -766,9 +825,14 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     )
                     active_response_id = None
                     response_state["active_response_id"] = None
+                    response_started_at.pop(rid, None)
+                    if len(buffers.remainder) < FRAME_BYTES:
+                        buffers.remainder.clear()
                 if rid is None:
                     active_response_id = None
                     response_state["active_response_id"] = None
+                    if len(buffers.remainder) < FRAME_BYTES:
+                        buffers.remainder.clear()
                 continue
 
     async def _send_openai_session_update() -> None:

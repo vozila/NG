@@ -11,6 +11,7 @@ from features.voice_flow_a import (
     _build_openai_session_update,
     _build_twilio_clear_msg,
     _chunk_to_frames,
+    _is_sender_underrun_state,
     _lifecycle_event_payload,
     _resolve_actor_mode_policy,
     _sanitize_transcript_for_event,
@@ -72,6 +73,25 @@ def test_audio_queue_bytes_counts_main_aux_and_remainder() -> None:
     buffers.aux.append(b"c" * 160)
     buffers.remainder.extend(b"d" * 10)
     assert _audio_queue_bytes(buffers) == (3 * 160) + 10
+
+
+def test_is_sender_underrun_state_active_response() -> None:
+    buffers = OutgoingAudioBuffers()
+    state = {"active_response_id": "resp_123"}
+    assert _is_sender_underrun_state(response_state=state, buffers=buffers) is True
+
+
+def test_is_sender_underrun_state_idle_silence() -> None:
+    buffers = OutgoingAudioBuffers()
+    state = {"active_response_id": None}
+    assert _is_sender_underrun_state(response_state=state, buffers=buffers) is False
+
+
+def test_is_sender_underrun_state_buffered_main_without_active_response() -> None:
+    buffers = OutgoingAudioBuffers()
+    buffers.main.append(b"x" * 160)
+    state = {"active_response_id": None}
+    assert _is_sender_underrun_state(response_state=state, buffers=buffers) is True
 
 
 def test_build_twilio_clear_msg() -> None:
