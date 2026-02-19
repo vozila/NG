@@ -1,9 +1,8 @@
 {
   "status": "ok",
-  "ts": 1771442012,
+  "ts": 1771469733,
   "enabled_features": [
-    "admin_quality",
-    "sample"
+    "admin_quality"
   ],
   "results": [
     {
@@ -11,12 +10,6 @@
       "ok": true,
       "ms": 0.0,
       "message": "admin_quality selftests ok"
-    },
-    {
-      "feature": "sample",
-      "ok": true,
-      "ms": 0.0,
-      "message": "sample selftest ok"
     }
   ],
   "report_path": "ops/QUALITY_REPORTS/latest_regression.json"

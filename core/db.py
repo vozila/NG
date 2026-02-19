@@ -206,3 +206,47 @@ def query_events(
             }
         )
     return out
+
+
+def query_events_for_rid(
+    tenant_id: str,
+    rid: str,
+    event_type: str | None = None,
+    limit: int = 1000,
+) -> list[dict[str, Any]]:
+    _validate_required(tenant_id, "tenant_id")
+    _validate_required(rid, "rid")
+    safe_limit = max(1, min(int(limit), 5000))
+
+    query = """
+        SELECT event_id, tenant_id, rid, event_type, ts, payload_json, trace_id, idempotency_key
+        FROM events
+        WHERE tenant_id = ? AND rid = ?
+    """
+    params: list[Any] = [tenant_id, rid]
+
+    if event_type is not None:
+        query += " AND event_type = ?"
+        params.append(event_type)
+
+    query += " ORDER BY ts ASC, event_id ASC LIMIT ?"
+    params.append(safe_limit)
+
+    with get_conn() as conn:
+        rows = conn.execute(query, params).fetchall()
+
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        out.append(
+            {
+                "event_id": str(row["event_id"]),
+                "tenant_id": str(row["tenant_id"]),
+                "rid": str(row["rid"]),
+                "event_type": str(row["event_type"]),
+                "ts": int(row["ts"]),
+                "payload": json.loads(str(row["payload_json"])),
+                "trace_id": row["trace_id"],
+                "idempotency_key": row["idempotency_key"],
+            }
+        )
+    return out

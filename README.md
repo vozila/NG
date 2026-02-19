@@ -7,6 +7,17 @@ NG is the next-generation Vozlia modular monolith (single repo) using **one-file
 - Each feature is behind a kill-switch env var: `VOZ_FEATURE_<NAME>` (default OFF).
 - Hot path (Voice Flow A) must remain minimal.
 
+## Auth policy (control-plane)
+- `/admin/*` endpoints require `Authorization: Bearer <VOZ_ADMIN_API_KEY>`.
+- `/owner/*` endpoints require `Authorization: Bearer <VOZ_OWNER_API_KEY>`.
+- Missing key env vars fail closed (unauthorized).
+
+## Post-call extraction approach
+- `POST /admin/postcall/extract` is model-first with strict schema validation.
+- Primary proposer: OpenAI Responses API with JSON-schema constrained output.
+- Deterministic fallback: local heuristic proposer when model path is disabled/fails.
+- Accepted output is always Pydantic-validated before event writes.
+
 ## Day 0 commands
 ```bash
 python -m compileall .

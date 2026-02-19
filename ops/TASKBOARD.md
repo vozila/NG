@@ -35,6 +35,13 @@
       - Endpoints: `GET /owner/events`, `GET /owner/events/latest`
       - Auth: `Authorization: Bearer <VOZ_OWNER_API_KEY>` (denies when key missing/invalid)
       - Backed by `core.db.query_events(...)`
+- [x] TASK-0213 — Post-call extraction (summary + lead + appointment request)
+      - Endpoint: `POST /admin/postcall/extract`
+      - Auth: `Authorization: Bearer <VOZ_ADMIN_API_KEY>`
+      - Gating: `VOZ_FEATURE_POSTCALL_EXTRACT=1` + `VOZ_POSTCALL_EXTRACT_ENABLED=1`
+      - Proposer: model-first (`/v1/responses` JSON schema) with deterministic heuristic fallback
+      - Writes: `postcall.summary`, `postcall.lead`, optional `postcall.appt_request`
+      - Fail-closed: schema invalid writes `postcall.extract_failed` + returns `422`
 
 ## NOW (next high-leverage work)
 - [ ] TASK-0207 — Mode-aware capability gating (MVP env-only; **fail closed**)

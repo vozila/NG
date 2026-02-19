@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.db import emit_event, get_conn, query_events
+from core.db import emit_event, get_conn, query_events, query_events_for_rid
 
 
 def test_schema_creation_in_temp_db(monkeypatch, tmp_path) -> None:
@@ -79,3 +79,23 @@ def test_idempotency_key_returns_existing_event(monkeypatch, tmp_path) -> None:
     assert event_id_1 == event_id_2
     assert len(rows) == 1
     assert rows[0]["payload"] == {"v": 1}
+
+
+def test_query_events_for_rid_is_tenant_scoped(monkeypatch, tmp_path) -> None:
+    db_path = tmp_path / "rid_scoped.sqlite3"
+    monkeypatch.setenv("VOZ_DB_PATH", str(db_path))
+
+    emit_event("tenant_a", "rid-1", "flow_a.transcript_completed", {"transcript": "a1"})
+    emit_event("tenant_a", "rid-2", "flow_a.transcript_completed", {"transcript": "a2"})
+    emit_event("tenant_b", "rid-1", "flow_a.transcript_completed", {"transcript": "b1"})
+
+    a_rows = query_events_for_rid("tenant_a", "rid-1", event_type="flow_a.transcript_completed", limit=50)
+    b_rows = query_events_for_rid("tenant_b", "rid-1", event_type="flow_a.transcript_completed", limit=50)
+
+    assert len(a_rows) == 1
+    assert len(b_rows) == 1
+    assert a_rows[0]["tenant_id"] == "tenant_a"
+    assert a_rows[0]["rid"] == "rid-1"
+    assert a_rows[0]["payload"]["transcript"] == "a1"
+    assert b_rows[0]["tenant_id"] == "tenant_b"
+    assert b_rows[0]["payload"]["transcript"] == "b1"

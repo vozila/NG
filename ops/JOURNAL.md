@@ -2,6 +2,27 @@
 
 **Timezone:** America/New_York
 
+## 2026-02-19 — TASK-0213 post-call extraction model-first + fallback hardening
+
+What changed:
+- `features/postcall_extract.py` now uses model-first extraction for proposer output:
+  - OpenAI Responses API (`/v1/responses`) with strict JSON schema format.
+- Added deterministic fallback to local heuristic proposer when model path is disabled or errors.
+- Preserved fail-closed contract:
+  - proposer output must pass strict Pydantic validation
+  - invalid schema writes `postcall.extract_failed` and returns `422`
+- Added debug breadcrumbs (debug-gated):
+  - `POSTCALL_EXTRACT_MODEL_USED ...`
+  - `POSTCALL_EXTRACT_FALLBACK_USED ...`
+- Updated docs for auth and approach consistency:
+  - admin bearer key for endpoint (`VOZ_ADMIN_API_KEY`)
+  - model knobs and fallback behavior documented.
+
+Proof (<=5):
+- `ruff check features/postcall_extract.py tests/test_postcall_extract.py` ✅
+- `.venv/bin/python -m pytest -q tests/test_postcall_extract.py` ✅ (`5 passed`)
+- `.venv/bin/python -m pytest -q` ✅ (`34 passed`)
+
 ## 2026-02-19 — TASK-0212 owner events API (read surface) + memory spine sync
 
 What changed:

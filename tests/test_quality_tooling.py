@@ -6,6 +6,9 @@ import sys
 import time
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+
+from core.app import create_app
 import features.admin_quality as admin_quality
 
 
@@ -45,3 +48,22 @@ def test_admin_quality_selftests_do_not_recurse_and_are_fast(monkeypatch) -> Non
     assert called["run_regression"] is False
     assert out.get("ok") is True
     assert dt < 0.5
+
+
+def test_admin_quality_regression_endpoint_requires_admin_bearer(monkeypatch) -> None:
+    monkeypatch.setenv("VOZ_FEATURE_ADMIN_QUALITY", "1")
+    monkeypatch.setenv("VOZ_ADMIN_API_KEY", "admin-secret")
+    monkeypatch.setenv("VOZ_FEATURE_SAMPLE", "0")
+
+    app = create_app()
+    client = TestClient(app)
+
+    unauthorized = client.post("/admin/quality/regression/run")
+    assert unauthorized.status_code == 401
+
+    authorized = client.post(
+        "/admin/quality/regression/run",
+        headers={"Authorization": "Bearer admin-secret"},
+    )
+    assert authorized.status_code == 200
+    assert "status" in authorized.json()
