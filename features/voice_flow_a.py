@@ -360,6 +360,7 @@ async def _twilio_sender_loop(
     idle_ticks = 0
     prebuf_waits = 0
     late_ms_max = 0.0
+    idle_late_ms_max = 0.0
     next_due = time.monotonic() + FRAME_SLEEP_S
     prebuf_complete_logged_for_rid: str | None = None
     prebuf_open_for_rid: str | None = None
@@ -385,7 +386,7 @@ async def _twilio_sender_loop(
                 prebuf_waits += 1
                 now = time.monotonic()
                 if now >= next_due:
-                    late_ms_max = max(late_ms_max, (now - next_due) * 1000.0)
+                    idle_late_ms_max = max(idle_late_ms_max, (now - next_due) * 1000.0)
                     next_due = now + FRAME_SLEEP_S
                 if now - stats_started >= stats_every_s:
                     prebuf = True
@@ -393,6 +394,7 @@ async def _twilio_sender_loop(
                         f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
                         f"frames_sent={frames_sent} underruns={underruns} idle_ticks={idle_ticks} "
                         f"prebuf_waits={prebuf_waits} late_ms_max={late_ms_max:.1f} prebuf={prebuf}"
+                        f" idle_late_ms_max={idle_late_ms_max:.1f}"
                     )
                     stats_started = now
                     frames_sent = 0
@@ -400,6 +402,7 @@ async def _twilio_sender_loop(
                     idle_ticks = 0
                     prebuf_waits = 0
                     late_ms_max = 0.0
+                    idle_late_ms_max = 0.0
                 await asyncio.sleep(0.01)
                 continue
             frame = buffers.main.popleft()
@@ -414,7 +417,7 @@ async def _twilio_sender_loop(
                 idle_ticks += 1
             now = time.monotonic()
             if now >= next_due:
-                late_ms_max = max(late_ms_max, (now - next_due) * 1000.0)
+                idle_late_ms_max = max(idle_late_ms_max, (now - next_due) * 1000.0)
                 next_due = now + FRAME_SLEEP_S
             if now - stats_started >= stats_every_s:
                 prebuf = bool(response_state.get("active_response_id")) and len(buffers.main) < prebuffer_frames
@@ -422,7 +425,8 @@ async def _twilio_sender_loop(
                     f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
                     f"frames_sent={frames_sent} underruns={underruns} idle_ticks={idle_ticks} "
                     f"prebuf_waits={prebuf_waits} "
-                    f"late_ms_max={late_ms_max:.1f} prebuf={prebuf}"
+                    f"late_ms_max={late_ms_max:.1f} prebuf={prebuf} "
+                    f"idle_late_ms_max={idle_late_ms_max:.1f}"
                 )
                 stats_started = now
                 frames_sent = 0
@@ -430,6 +434,7 @@ async def _twilio_sender_loop(
                 idle_ticks = 0
                 prebuf_waits = 0
                 late_ms_max = 0.0
+                idle_late_ms_max = 0.0
             await asyncio.sleep(0.01)
             continue
 
@@ -464,7 +469,8 @@ async def _twilio_sender_loop(
                 f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
                 f"frames_sent={frames_sent} underruns={underruns} idle_ticks={idle_ticks} "
                 f"prebuf_waits={prebuf_waits} "
-                f"late_ms_max={late_ms_max:.1f} prebuf={prebuf}"
+                f"late_ms_max={late_ms_max:.1f} prebuf={prebuf} "
+                f"idle_late_ms_max={idle_late_ms_max:.1f}"
             )
             stats_started = now
             frames_sent = 0
@@ -472,6 +478,7 @@ async def _twilio_sender_loop(
             idle_ticks = 0
             prebuf_waits = 0
             late_ms_max = 0.0
+            idle_late_ms_max = 0.0
 
         next_due = now + FRAME_SLEEP_S
         await asyncio.sleep(FRAME_SLEEP_S)
