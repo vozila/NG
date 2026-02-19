@@ -3,13 +3,15 @@ Purpose: Twilio Media Streams handler for Voice Flow A (Twilio WS <-> OpenAI Rea
 Hot path: YES (WS audio loop). Keep per-frame work bounded; no DB or heavy prompt building.
 Public interfaces:
   - websocket /twilio/stream
-Reads/Writes: env vars only (no DB).
+Reads/Writes: env vars; optional lifecycle event writes via core.db.emit_event (off hot path).
 Feature flags:
   - VOZ_FEATURE_VOICE_FLOW_A
   - VOZ_FLOW_A_OPENAI_BRIDGE
+  - VOZ_FLOW_A_EVENT_EMIT
   - VOZLIA_DEBUG
 Failure mode:
   - If OpenAI bridge fails, Twilio stream stays connected but no assistant audio is produced.
+  - If DB event emission fails, audio loop remains fail-open.
 Last touched: 2026-02-18 (response.create must request supported modalities; add first-delta breadcrumbs)
 """
 
@@ -32,6 +34,7 @@ from urllib.parse import quote_plus
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
+from core import db as core_db
 from core.config import env_flag, is_debug
 from core.logging import logger
 
@@ -216,6 +219,47 @@ def _build_openai_session_update(*, voice: str, instructions: str | None) -> dic
     return {"type": "session.update", "session": session}
 
 
+def _event_emit_enabled() -> bool:
+    return env_flag("VOZ_FLOW_A_EVENT_EMIT")
+
+
+async def _emit_flow_a_event(
+    *,
+    enabled: bool,
+    tenant_id: str | None,
+    rid: str | None,
+    event_type: str,
+    payload: dict[str, Any],
+    idempotency_key: str | None = None,
+) -> None:
+    if not enabled:
+        return
+
+    tenant = (tenant_id or "").strip()
+    request_id = (rid or "").strip()
+    if not tenant or not request_id:
+        _dbg(f"FLOW_A_EVENT_SKIPPED type={event_type} reason=missing_context")
+        return
+
+    event_payload = dict(payload)
+    event_payload.setdefault("tenant_id", tenant)
+    event_payload.setdefault("rid", request_id)
+
+    try:
+        await asyncio.to_thread(
+            core_db.emit_event,
+            tenant,
+            request_id,
+            event_type,
+            event_payload,
+            None,
+            idempotency_key,
+        )
+        _dbg(f"FLOW_A_EVENT_EMITTED type={event_type} tenant_id={tenant} rid={request_id}")
+    except Exception as e:
+        _dbg(f"FLOW_A_EVENT_EMIT_FAILED type={event_type} tenant_id={tenant} rid={request_id} err={e!r}")
+
+
 async def _connect_openai_ws(*, model: str) -> Any:
     """
     Connect to OpenAI Realtime WebSocket.
@@ -341,6 +385,14 @@ async def twilio_stream(websocket: WebSocket) -> None:
     turn_logged_speech_started = False
     turn_logged_transcript = False
     turn_logged_response_create = False
+    call_tenant_id: str | None = None
+    call_tenant_mode: str | None = None
+    call_ai_mode: str = "customer"
+    call_rid: str | None = None
+    call_sid: str | None = None
+    call_stream_sid: str | None = None
+    event_emit_enabled = _event_emit_enabled()
+    call_stopped_emitted = False
 
     def _drop_oldest_put(item: str) -> None:
         try:
@@ -456,6 +508,21 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     _dbg(f"OPENAI_TRANSCRIPT completed len={len(transcript)} turn={turn_seq}")
                     turn_logged_transcript = True
 
+                await _emit_flow_a_event(
+                    enabled=event_emit_enabled,
+                    tenant_id=call_tenant_id,
+                    rid=call_rid,
+                    event_type="flow_a.transcript_completed",
+                    payload={
+                        "tenant_id": call_tenant_id,
+                        "rid": call_rid,
+                        "ai_mode": call_ai_mode,
+                        "tenant_mode": call_tenant_mode,
+                        "turn": turn_seq,
+                        "transcript_len": len(transcript),
+                    },
+                )
+
                 if active_response_id is not None:
                     continue
 
@@ -557,10 +624,12 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 rid = response.get("id")
                 out_mods = response.get("output_modalities")
                 _dbg(f"OPENAI_RESPONSE_DONE id={rid} output_modalities={out_mods}")
+                had_audio = False
 
                 if isinstance(rid, str) and rid:
                     seen_audio_ids = response_state.get("seen_audio_ids")
                     done_no_audio_ids = response_state.get("logged_done_no_audio_ids")
+                    had_audio = isinstance(seen_audio_ids, set) and rid in seen_audio_ids
                     if (
                         isinstance(seen_audio_ids, set)
                         and isinstance(done_no_audio_ids, set)
@@ -569,6 +638,23 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     ):
                         _dbg(f"OPENAI_RESPONSE_DONE_NO_AUDIO id={rid} output_modalities={out_mods}")
                         done_no_audio_ids.add(rid)
+
+                await _emit_flow_a_event(
+                    enabled=event_emit_enabled,
+                    tenant_id=call_tenant_id,
+                    rid=call_rid,
+                    event_type="flow_a.response_done",
+                    payload={
+                        "tenant_id": call_tenant_id,
+                        "rid": call_rid,
+                        "ai_mode": call_ai_mode,
+                        "tenant_mode": call_tenant_mode,
+                        "turn": turn_seq,
+                        "response_id": rid,
+                        "output_modalities": out_mods,
+                        "had_audio": had_audio,
+                    },
+                )
 
                 if isinstance(rid, str) and rid and rid == active_response_id:
                     active_response_id = None
@@ -613,6 +699,12 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 from_number = custom.get("from_number")
                 ai_mode_raw = custom.get("ai_mode")
                 ai_mode = _normalize_ai_mode(ai_mode_raw if isinstance(ai_mode_raw, str) else None)
+                call_tenant_id = tenant_id
+                call_tenant_mode = tenant_mode if isinstance(tenant_mode, str) else None
+                call_ai_mode = ai_mode
+                call_rid = rid if isinstance(rid, str) else None
+                call_sid = call_sid if isinstance(call_sid, str) else None
+                call_stream_sid = stream_sid_ref.get("streamSid")
                 # Keep compatibility with existing policy resolver that uses client|owner naming.
                 actor_mode = "owner" if ai_mode == "owner" else "client"
                 voice, instructions = _resolve_actor_mode_policy(tenant_id, actor_mode)
@@ -631,6 +723,22 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 if not logged_mode_selection:
                     _dbg(f"VOICE_FLOW_A_MODE_SELECTED ai_mode={ai_mode} tenant_id={tenant_id} rid={rid}")
                     logged_mode_selection = True
+
+                await _emit_flow_a_event(
+                    enabled=event_emit_enabled,
+                    tenant_id=call_tenant_id,
+                    rid=call_rid,
+                    event_type="flow_a.call_started",
+                    payload={
+                        "tenant_id": call_tenant_id,
+                        "rid": call_rid,
+                        "ai_mode": call_ai_mode,
+                        "tenant_mode": call_tenant_mode,
+                        "call_sid": call_sid,
+                        "stream_sid": call_stream_sid,
+                    },
+                    idempotency_key=f"{call_rid}:call_started" if call_rid else None,
+                )
 
                 if bridge_enabled:
                     try:
@@ -655,13 +763,65 @@ async def twilio_stream(websocket: WebSocket) -> None:
             if event_type == "stop":
                 stop = evt.get("stop") or {}
                 _dbg(f"TWILIO_WS_STOP streamSid={stream_sid_ref.get('streamSid')} callSid={stop.get('callSid')}")
+                if not call_stopped_emitted:
+                    await _emit_flow_a_event(
+                        enabled=event_emit_enabled,
+                        tenant_id=call_tenant_id,
+                        rid=call_rid,
+                        event_type="flow_a.call_stopped",
+                        payload={
+                            "tenant_id": call_tenant_id,
+                            "rid": call_rid,
+                            "ai_mode": call_ai_mode,
+                            "tenant_mode": call_tenant_mode,
+                            "reason": "twilio_stop",
+                            "call_sid": call_sid,
+                            "stream_sid": call_stream_sid,
+                        },
+                        idempotency_key=f"{call_rid}:call_stopped" if call_rid else None,
+                    )
+                    call_stopped_emitted = True
                 break
 
     except WebSocketDisconnect:
-        pass
+        if not call_stopped_emitted:
+            await _emit_flow_a_event(
+                enabled=event_emit_enabled,
+                tenant_id=call_tenant_id,
+                rid=call_rid,
+                event_type="flow_a.call_stopped",
+                payload={
+                    "tenant_id": call_tenant_id,
+                    "rid": call_rid,
+                    "ai_mode": call_ai_mode,
+                    "tenant_mode": call_tenant_mode,
+                    "reason": "twilio_disconnect",
+                    "call_sid": call_sid,
+                    "stream_sid": call_stream_sid,
+                },
+                idempotency_key=f"{call_rid}:call_stopped" if call_rid else None,
+            )
+            call_stopped_emitted = True
     except Exception as e:
         _dbg(f"TWILIO_WS_ERROR err={e!r}")
     finally:
+        if not call_stopped_emitted:
+            await _emit_flow_a_event(
+                enabled=event_emit_enabled,
+                tenant_id=call_tenant_id,
+                rid=call_rid,
+                event_type="flow_a.call_stopped",
+                payload={
+                    "tenant_id": call_tenant_id,
+                    "rid": call_rid,
+                    "ai_mode": call_ai_mode,
+                    "tenant_mode": call_tenant_mode,
+                    "reason": "stream_cleanup",
+                    "call_sid": call_sid,
+                    "stream_sid": call_stream_sid,
+                },
+                idempotency_key=f"{call_rid}:call_stopped" if call_rid else None,
+            )
         for t in (in_task, out_task, sender_task):
             if t:
                 t.cancel()

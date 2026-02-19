@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+
 from core.app import create_app
+from features import voice_flow_a
 from features.voice_flow_a import (
+    OutgoingAudioBuffers,
+    WaitingAudioController,
     _build_openai_session_update,
     _build_twilio_clear_msg,
     _chunk_to_frames,
     _resolve_actor_mode_policy,
-    OutgoingAudioBuffers,
-    WaitingAudioController,
 )
 
 
@@ -141,3 +144,75 @@ def test_resolve_actor_mode_policy_when_kill_switch_off_uses_base_env(monkeypatc
     voice, instructions = _resolve_actor_mode_policy("tenant_demo", "owner")
     assert voice == "marin"
     assert instructions == "base instructions"
+
+
+def test_emit_flow_a_event_kill_switch_off_makes_no_db_calls(monkeypatch) -> None:
+    monkeypatch.setenv("VOZ_FLOW_A_EVENT_EMIT", "0")
+    calls: list[tuple[str, str, str]] = []
+
+    def _fake_emit_event(
+        tenant_id: str,
+        rid: str,
+        event_type: str,
+        payload_dict: dict[str, object],
+        trace_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> str:
+        calls.append((tenant_id, rid, event_type))
+        return "evt_1"
+
+    monkeypatch.setattr(voice_flow_a.core_db, "emit_event", _fake_emit_event)
+    assert voice_flow_a._event_emit_enabled() is False
+
+    asyncio.run(
+        voice_flow_a._emit_flow_a_event(
+            enabled=voice_flow_a._event_emit_enabled(),
+            tenant_id="tenant_demo",
+            rid="rid-123",
+            event_type="flow_a.call_started",
+            payload={
+                "tenant_id": "tenant_demo",
+                "rid": "rid-123",
+                "ai_mode": "owner",
+                "tenant_mode": "owner",
+            },
+        )
+    )
+
+    assert calls == []
+
+
+def test_emit_flow_a_event_kill_switch_on_emits_expected_tuple(monkeypatch) -> None:
+    monkeypatch.setenv("VOZ_FLOW_A_EVENT_EMIT", "1")
+    calls: list[tuple[str, str, str]] = []
+
+    def _fake_emit_event(
+        tenant_id: str,
+        rid: str,
+        event_type: str,
+        payload_dict: dict[str, object],
+        trace_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> str:
+        calls.append((tenant_id, rid, event_type))
+        return "evt_1"
+
+    monkeypatch.setattr(voice_flow_a.core_db, "emit_event", _fake_emit_event)
+    assert voice_flow_a._event_emit_enabled() is True
+
+    asyncio.run(
+        voice_flow_a._emit_flow_a_event(
+            enabled=voice_flow_a._event_emit_enabled(),
+            tenant_id="tenant_demo",
+            rid="rid-456",
+            event_type="flow_a.call_started",
+            payload={
+                "tenant_id": "tenant_demo",
+                "rid": "rid-456",
+                "ai_mode": "customer",
+                "tenant_mode": "customer",
+            },
+        )
+    )
+
+    assert calls == [("tenant_demo", "rid-456", "flow_a.call_started")]

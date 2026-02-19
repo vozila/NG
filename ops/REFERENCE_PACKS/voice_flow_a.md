@@ -66,3 +66,17 @@
 - Back-compat: `VOZ_ACCESS_CODE_MAP_JSON` remains legacy owner map.
 - Optional customer map: `VOZ_CLIENT_ACCESS_CODE_MAP_JSON`.
 - Feature mode convention: `VOZ_FEATURE_<NAME>_AI_MODES=customer,owner`.
+
+## 7) Durable call events (hot-path safe gate)
+- Kill-switch: `VOZ_FLOW_A_EVENT_EMIT=0|1` (default `0`).
+- Storage: writes via `core.db.emit_event` (uses `VOZ_DB_PATH`).
+- Non-blocking discipline:
+  - Emission runs off-loop via `asyncio.to_thread(...)`.
+  - DB failures are fail-open for audio/WS loop.
+- Allowed emit points only:
+  - Twilio `start` -> `flow_a.call_started`
+  - transcript completion -> `flow_a.transcript_completed`
+  - model response done -> `flow_a.response_done`
+  - Twilio `stop`/disconnect/cleanup -> `flow_a.call_stopped`
+- Required payload baseline on every event:
+  - `tenant_id`, `rid`, `ai_mode`, `tenant_mode`

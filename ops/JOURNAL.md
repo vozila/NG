@@ -2,6 +2,29 @@
 
 **Timezone:** America/New_York
 
+## 2026-02-19 — TASK-0212 owner events API (read surface) + memory spine sync
+
+What changed:
+- Added `features/owner_events_api.py` behind `VOZ_FEATURE_OWNER_EVENTS_API`.
+- Added read-only endpoints:
+  - `GET /owner/events`
+  - `GET /owner/events/latest`
+- Added simple bearer auth:
+  - env secret: `VOZ_OWNER_API_KEY`
+  - header: `Authorization: Bearer <VOZ_OWNER_API_KEY>`
+  - deny (401) if secret missing or token invalid.
+- Backed API reads by `core.db.query_events(...)`.
+- Synced continuity docs to reflect:
+  - TASK-0203 and TASK-0204 are DONE
+  - access code deterministically selects `ai_mode`
+  - Flow A audible known-good signatures are stable.
+
+Proof (<=5):
+- `python3 -m compileall .` ✅
+- `python3 -c "import features.owner_events_api"` ✅
+- `ruff check .` ✅
+- `.venv/bin/python -m pytest -q tests/test_owner_events_api.py` ✅
+
 ## 2026-02-18 — Flow A audio out milestone (TASK-0201.5)
 
 What changed:
@@ -59,4 +82,3 @@ Proof (<=5):
 - `python -m compileall .` ✅
 - `uvx ruff check .` ✅
 - `pytest -q` ✅ (`23 passed`)
-

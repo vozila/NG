@@ -1,17 +1,20 @@
 # CHECKPOINT (rolling) — Vozlia NG
 
-**Updated:** 2026-02-18 (America/New_York)
+**Updated:** 2026-02-19 (America/New_York)
 
 ## Current state
-- Planning and continuity docs now treat access code routing as the selector for `ai_mode`.
-- Canonical mode labels are `ai_mode=customer` and `ai_mode=owner`.
-- Flow A reference pack is updated as the source of truth for audio bridge behavior and failure signatures.
+- Access code routing deterministically selects `ai_mode` (`customer|owner`) and propagates it to Flow A.
+- TASK-0203 and TASK-0204 are completed and treated as settled contract behavior.
+- Flow A reference pack remains source-of-truth for audible bridge behavior and failure signatures.
+- Owner read-surface is available behind feature flag via `GET /owner/events` and `GET /owner/events/latest`.
 
 ## Last known good
 - Flow A OpenAI Realtime bridge: audio deltas received + Twilio μ-law frames sent + caller hears speech.
 - Realtime compatibility fix is known: `response.modalities` must be `['audio','text']` (or model-supported equivalent), not `['audio']`.
+- Known-good audible breadcrumbs:
+  - `OPENAI_AUDIO_DELTA_FIRST ...`
+  - `TWILIO_MAIN_FRAME_SENT first=1 ...`
 
 ## Next actions
-- Implement TASK-0203: access code resolves `{tenant_id, ai_mode}` and passes `start.customParameters.ai_mode`.
-- Implement TASK-0204: enforce mode-specific instructions/protocols by `(tenant_id, ai_mode)` with fail-closed defaults.
 - Add/verify feature gating via `VOZ_FEATURE_<NAME>_AI_MODES`.
+- Build owner analytics views on top of durable `flow_a.*` events.

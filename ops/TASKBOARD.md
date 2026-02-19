@@ -1,5 +1,5 @@
 # Vozlia NG — TASKBOARD
-**Date:** 2026-02-18 (America/New_York)
+**Date:** 2026-02-19 (America/New_York)
 
 ## DONE
 - [x] Day 0 Milestone: NG skeleton + loader + registry + admin_quality + sample + scripts + gates green
@@ -30,6 +30,11 @@
 - [x] TASK-0204 — Flow A `ai_mode` policy selection (MVP env-only)
       - Mode-specific instructions/voice selected by `(tenant_id, ai_mode)` via env-config JSON
       - Flow A logs include `ai_mode=...` for routing clarity
+- [x] TASK-0212 — Owner Events API + memory spine sync
+      - New feature module: `owner_events_api` (read-only, feature-flagged)
+      - Endpoints: `GET /owner/events`, `GET /owner/events/latest`
+      - Auth: `Authorization: Bearer <VOZ_OWNER_API_KEY>` (denies when key missing/invalid)
+      - Backed by `core.db.query_events(...)`
 
 ## NOW (next high-leverage work)
 - [ ] TASK-0207 — Mode-aware capability gating (MVP env-only; **fail closed**)
@@ -38,7 +43,7 @@
       - Default behavior for unknown modes: treat as `customer`
 - [ ] TASK-0205 — Owner-mode analytics foundations (owner-only)
       - QuerySpec schema (strict JSON) + deterministic executor (SQL/DB reads only)
-      - Must not run in Flow A hot path; results summarized out-of-band
+      - Must not run in Flow A hot path; consume facts via owner events read API
 - [ ] TASK-0206 — Customer-mode capabilities (MVP)
       - Customer greeting + customer protocols
       - Lead capture / appointment request capture (domain stubs acceptable)
@@ -63,4 +68,3 @@
 - `VOZ_FEATURE_VOICE_FLOW_A=0` disables WS endpoint entirely.
 - `VOZ_FEATURE_SHARED_LINE_ACCESS=0` disables shared-line routing/access gate.
 - `VOZ_DUAL_MODE_ACCESS=0` reverts to legacy (owner-only) access-code behavior.
-

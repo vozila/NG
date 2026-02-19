@@ -1,12 +1,12 @@
 # Shared Line Access Reference Pack
 
-**Updated:** 2026-02-18 (America/New_York)
+**Updated:** 2026-02-19 (America/New_York)
 
 ## Scope
 Feature module: `features/shared_line_access.py`  
 Feature gate: `VOZ_FEATURE_SHARED_LINE_ACCESS=1`
 
-This pack documents shared-line and dedicated-line Twilio routing behavior, including **dual-mode access-code resolution for `ai_mode`**.
+This pack documents shared-line and dedicated-line Twilio routing behavior, including **deterministic access-code resolution for `ai_mode`**.
 
 **Canonical mode field:** `ai_mode`  
 **Allowed values:** `customer` | `owner`
@@ -53,6 +53,9 @@ If `To` does not match shared line or a dedicated line key, reject politely (e.g
 ---
 
 ## Access code resolution (ai_mode selection)
+
+Deterministic rule:
+- One code resolves one `{tenant_id, ai_mode}` outcome; no runtime guessing.
 
 ### Control surface
 - `VOZ_DUAL_MODE_ACCESS=0|1`
@@ -133,4 +136,3 @@ Fix:
 - Shared line returns Gather with XML-safe escaped action URL
 - Dual-mode resolver returns correct `(tenant_id, ai_mode)`
 - Stream TwiML includes `ai_mode`
-

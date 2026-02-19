@@ -54,3 +54,16 @@ Decision:
 Implications:
 - Shared-line resolver returns `{tenant_id, ai_mode}` and passes `ai_mode` via `start.customParameters.ai_mode`.
 - Mode-specific protocols/instructions must be selected by `(tenant_id, ai_mode)` with fail-closed defaults.
+
+## 2026-02-19 — Owner events are exposed via a feature-flagged read API
+
+Decision:
+- Add a read-only owner API surface backed by `core.db.query_events(...)`:
+  - `GET /owner/events`
+  - `GET /owner/events/latest`
+- Gate endpoint exposure with `VOZ_FEATURE_OWNER_EVENTS_API=1`.
+- Require bearer token auth via `VOZ_OWNER_API_KEY`; deny with 401 if key missing or invalid.
+
+Implications:
+- Owner mode and analytics can consume durable `flow_a.*` facts without touching Flow A WS hot path.
+- Emergency rollback is immediate by setting `VOZ_FEATURE_OWNER_EVENTS_API=0`.
