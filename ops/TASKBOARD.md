@@ -69,6 +69,16 @@
       - Auth: `Authorization: Bearer <VOZ_ADMIN_API_KEY>`
       - Gates: `VOZ_FEATURE_POSTCALL_NOTIFY_SMS=1` + `VOZ_POSTCALL_NOTIFY_SMS_ENABLED=1`
       - Supports dry-run planning and idempotent non-dry send/write path (`notify.sms_sent`)
+- [x] Flow A realtime observability diagnostics hardening
+      - Added debug-gated sender/speech-controller diagnostics for audio quality triage
+      - New env knobs:
+        - `VOICE_TWILIO_STATS_EVERY_MS`
+        - `VOICE_TWILIO_PREBUFFER_FRAMES`
+        - `VOICE_SPEECH_CTRL_HEARTBEAT_MS`
+      - Signatures include:
+        - `twilio_send stats ...`
+        - `speech_ctrl_HEARTBEAT ...`
+        - `speech_ctrl_ACTIVE_DONE ...`
 
 ## NOW (next high-leverage work)
 - [ ] TASK-0207 — Mode-aware capability gating (MVP env-only; **fail closed**)

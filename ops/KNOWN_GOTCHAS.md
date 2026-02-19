@@ -57,6 +57,32 @@ Fix:
 ## Observability (general)
 - Logging inside 20ms audio loops is not “free”. Keep per-frame logs OFF; use first-delta breadcrumbs only.
 
+### 9) Realtime diagnostics can still hurt audio if overused
+Symptom:
+- Voice quality degrades when debug logging is left on for long calls.
+
+Fix:
+- Keep `VOZLIA_DEBUG=0` by default in production.
+- When troubleshooting, use bounded windows and rely on summary signatures:
+  - `twilio_send stats ...`
+  - `speech_ctrl_HEARTBEAT ...`
+  - `speech_ctrl_ACTIVE_DONE ...`
+
+### 10) How to read `twilio_send stats` quickly
+Symptom:
+- Intermittent clipping, delayed starts, or robotic pacing.
+
+Interpretation:
+- `underruns` rising: sender had no frame available; expect audible gaps.
+- `late_ms_max` high spikes (e.g. 100ms+): event-loop scheduling or contention issue.
+- `prebuf=True` for too long: startup buffering delay.
+- `q_bytes` large and not draining: output backlog / pacing mismatch.
+
+Related knobs:
+- `VOICE_TWILIO_STATS_EVERY_MS`
+- `VOICE_TWILIO_PREBUFFER_FRAMES`
+- `VOICE_SPEECH_CTRL_HEARTBEAT_MS`
+
 ## Post-call extraction
 
 ### 7) `transcript_not_found` despite successful calls

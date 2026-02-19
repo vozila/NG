@@ -26,6 +26,7 @@ import asyncio
 import base64
 import json
 import os
+import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
@@ -223,6 +224,10 @@ def _chunk_to_frames(remainder: bytearray, chunk: bytes, *, frame_bytes: int = F
     return out
 
 
+def _audio_queue_bytes(buffers: OutgoingAudioBuffers) -> int:
+    return (len(buffers.main) * FRAME_BYTES) + (len(buffers.aux) * FRAME_BYTES) + len(buffers.remainder)
+
+
 def _build_openai_session_update(*, voice: str, instructions: str | None) -> dict[str, Any]:
     """
     IMPORTANT:
@@ -339,6 +344,15 @@ async def _twilio_sender_loop(
     response_state: dict[str, Any],
 ) -> None:
     """Send frames to Twilio at ~20ms pacing. Prefer main lane, then aux."""
+    stats_every_s = max(0.25, _env_int("VOICE_TWILIO_STATS_EVERY_MS", 1000) / 1000.0)
+    prebuffer_frames = max(0, _env_int("VOICE_TWILIO_PREBUFFER_FRAMES", 6))
+    stats_started = time.monotonic()
+    frames_sent = 0
+    underruns = 0
+    late_ms_max = 0.0
+    next_due = time.monotonic() + FRAME_SLEEP_S
+    prebuf_complete_logged_for_rid: str | None = None
+
     while True:
         sid = stream_sid_ref.get("streamSid")
         if not sid:
@@ -354,17 +368,41 @@ async def _twilio_sender_loop(
             frame = buffers.aux.popleft()
             lane = "aux"
         else:
+            underruns += 1
+            now = time.monotonic()
+            if now >= next_due:
+                late_ms_max = max(late_ms_max, (now - next_due) * 1000.0)
+                next_due = now + FRAME_SLEEP_S
+            if now - stats_started >= stats_every_s:
+                prebuf = bool(response_state.get("active_response_id")) and len(buffers.main) < prebuffer_frames
+                _dbg(
+                    f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
+                    f"frames_sent={frames_sent} underruns={underruns} "
+                    f"late_ms_max={late_ms_max:.1f} prebuf={prebuf}"
+                )
+                stats_started = now
+                frames_sent = 0
+                underruns = 0
+                late_ms_max = 0.0
             await asyncio.sleep(0.01)
             continue
+
+        now = time.monotonic()
+        if now >= next_due:
+            late_ms_max = max(late_ms_max, (now - next_due) * 1000.0)
 
         # Send immediately, then sleep to pace.
         msg = _build_twilio_media_msg(sid, frame)
         async with send_lock:
             await websocket.send_text(json.dumps(msg))
+        frames_sent += 1
 
         if lane == "main":
             rid = response_state.get("active_response_id")
             if isinstance(rid, str):
+                if rid != prebuf_complete_logged_for_rid and len(buffers.main) >= prebuffer_frames:
+                    _dbg("Prebuffer complete; starting to send audio to Twilio")
+                    prebuf_complete_logged_for_rid = rid
                 logged_main_ids = response_state.get("logged_twilio_main_frame_ids")
                 if isinstance(logged_main_ids, set) and rid not in logged_main_ids:
                     _dbg(
@@ -372,6 +410,19 @@ async def _twilio_sender_loop(
                     )
                     logged_main_ids.add(rid)
 
+        if now - stats_started >= stats_every_s:
+            prebuf = bool(response_state.get("active_response_id")) and len(buffers.main) < prebuffer_frames
+            _dbg(
+                f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
+                f"frames_sent={frames_sent} underruns={underruns} "
+                f"late_ms_max={late_ms_max:.1f} prebuf={prebuf}"
+            )
+            stats_started = now
+            frames_sent = 0
+            underruns = 0
+            late_ms_max = 0.0
+
+        next_due = now + FRAME_SLEEP_S
         await asyncio.sleep(FRAME_SLEEP_S)
 
 
@@ -401,6 +452,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
     sender_task: asyncio.Task | None = None
     in_task: asyncio.Task | None = None
     out_task: asyncio.Task | None = None
+    heartbeat_task: asyncio.Task | None = None
     openai_input_blocked_unknown_param = False
     logged_session_created = False
     logged_session_updated = False
@@ -431,6 +483,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
     call_to_number: str | None = None
     event_emit_enabled = _event_emit_enabled()
     call_stopped_emitted = False
+    response_started_at: dict[str, float] = {}
 
     def _drop_oldest_put(item: str) -> None:
         try:
@@ -520,6 +573,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 turn_logged_transcript = False
                 turn_logged_response_create = False
 
+                _dbg("OpenAI VAD: user speech START")
                 buffers.main.clear()
                 wait_ctl.on_user_speech_started(buffers=buffers)
 
@@ -530,6 +584,10 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     _dbg("TWILIO_CLEAR_SENT")
 
                 if active_response_id:
+                    _dbg(
+                        "BARGE-IN: user speech started while AI speaking; "
+                        "canceling active response and clearing audio buffer."
+                    )
                     await openai_ws.send(json.dumps({"type": "response.cancel"}))
 
                 if not turn_logged_speech_started:
@@ -580,6 +638,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 if isinstance(rid, str) and rid:
                     active_response_id = rid
                     response_state["active_response_id"] = rid
+                    response_started_at[rid] = time.monotonic()
                     _dbg(f"OPENAI_RESPONSE_CREATED id={rid}")
                 continue
 
@@ -663,6 +722,11 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 rid = response.get("id")
                 out_mods = response.get("output_modalities")
                 _dbg(f"OPENAI_RESPONSE_DONE id={rid} output_modalities={out_mods}")
+                if isinstance(rid, str):
+                    started = response_started_at.get(rid)
+                    if isinstance(started, float):
+                        dt_ms = int((time.monotonic() - started) * 1000.0)
+                        _dbg(f"speech_ctrl_ACTIVE_DONE type=response.done response_id={rid} dt_ms={dt_ms}")
                 had_audio = False
 
                 if isinstance(rid, str) and rid:
@@ -696,6 +760,10 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 )
 
                 if isinstance(rid, str) and rid and rid == active_response_id:
+                    _dbg(
+                        f"Response {rid} finished with event 'response.done'; "
+                        "clearing active_response_id"
+                    )
                     active_response_id = None
                     response_state["active_response_id"] = None
                 if rid is None:
@@ -708,6 +776,16 @@ async def twilio_stream(websocket: WebSocket) -> None:
         await openai_ws.send(json.dumps(_build_openai_session_update(voice=voice, instructions=instructions)))
         openai_input_blocked_unknown_param = False
 
+    async def _speech_ctrl_heartbeat_loop() -> None:
+        every_s = max(0.5, _env_int("VOICE_SPEECH_CTRL_HEARTBEAT_MS", 2000) / 1000.0)
+        while True:
+            await asyncio.sleep(every_s)
+            _dbg(
+                "speech_ctrl_HEARTBEAT "
+                f"enabled={bridge_enabled} shadow=False qsize={in_q.qsize()} "
+                f"active_response_id={response_state.get('active_response_id')}"
+            )
+
     try:
         sender_task = asyncio.create_task(
             _twilio_sender_loop(
@@ -719,6 +797,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 response_state=response_state,
             )
         )
+        heartbeat_task = asyncio.create_task(_speech_ctrl_heartbeat_loop())
 
         while True:
             raw = await websocket.receive_text()
@@ -872,7 +951,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 ),
                 idempotency_key=f"{call_rid}:call_stopped" if call_rid else None,
             )
-        for t in (in_task, out_task, sender_task):
+        for t in (in_task, out_task, sender_task, heartbeat_task):
             if t:
                 t.cancel()
         try:

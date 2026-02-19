@@ -7,6 +7,7 @@ from features import voice_flow_a
 from features.voice_flow_a import (
     OutgoingAudioBuffers,
     WaitingAudioController,
+    _audio_queue_bytes,
     _build_openai_session_update,
     _build_twilio_clear_msg,
     _chunk_to_frames,
@@ -63,6 +64,14 @@ def test_chunk_to_frames_yields_160_byte_frames_with_remainder() -> None:
     assert len(out2) == 1
     assert len(out2[0]) == 160
     assert len(remainder) == 0
+
+
+def test_audio_queue_bytes_counts_main_aux_and_remainder() -> None:
+    buffers = OutgoingAudioBuffers()
+    buffers.main.extend([b"a" * 160, b"b" * 160])
+    buffers.aux.append(b"c" * 160)
+    buffers.remainder.extend(b"d" * 10)
+    assert _audio_queue_bytes(buffers) == (3 * 160) + 10
 
 
 def test_build_twilio_clear_msg() -> None:

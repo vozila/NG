@@ -87,3 +87,38 @@
     - `from_number`, `to_number`
 - Transcript-completed payload contract:
   - include `transcript_len` and `transcript` text (sanitized/bounded) so downstream post-call extraction can operate.
+
+## 8) Realtime diagnostics (debug-only)
+Purpose: detect queue pressure, pacing drift, underruns, and barge-in timing regressions without adding per-frame spam.
+
+Primary signatures:
+- `twilio_send stats: q_bytes=... frames_sent=... underruns=... late_ms_max=... prebuf=...`
+- `Prebuffer complete; starting to send audio to Twilio`
+- `speech_ctrl_HEARTBEAT enabled=... shadow=False qsize=... active_response_id=...`
+- `speech_ctrl_ACTIVE_DONE type=response.done response_id=... dt_ms=...`
+- `OpenAI VAD: user speech START`
+- `BARGE-IN: user speech started while AI speaking; canceling active response and clearing audio buffer.`
+
+Interpretation hints:
+- Rising `underruns` with `q_bytes` near 0 indicates audio starvation/jitter risk.
+- `late_ms_max` spikes (especially >100ms) indicate sender pacing drift or event-loop contention.
+- `prebuf=True` means buffering gate is active; prolonged prebuffer can feel like delayed speech start.
+- `qsize` (heartbeat input queue) growth suggests upstream ingestion pressure.
+
+Env knobs (all are env vars):
+- `VOICE_TWILIO_STATS_EVERY_MS` (default `1000`)
+- `VOICE_TWILIO_PREBUFFER_FRAMES` (default `6`)
+- `VOICE_SPEECH_CTRL_HEARTBEAT_MS` (default `2000`)
+
+Safety:
+- All diagnostics are gated behind `VOZLIA_DEBUG=1`.
+- Keep debug logging off in normal production runs to avoid hot-path overhead.
+
+Recommended defaults by environment:
+
+| Environment | `VOZLIA_DEBUG` | `VOICE_TWILIO_STATS_EVERY_MS` | `VOICE_TWILIO_PREBUFFER_FRAMES` | `VOICE_SPEECH_CTRL_HEARTBEAT_MS` | Notes |
+|---|---:|---:|---:|---:|---|
+| Dev | `1` | `1000` | `6` | `2000` | Good baseline for iterative troubleshooting. |
+| Staging (short test window) | `1` | `1000-2000` | `6` | `2000-5000` | Use for bounded test calls; disable after capture. |
+| Prod (normal) | `0` | `1000` | `6` | `2000` | Knobs may remain set, but logs stay off with debug disabled. |
+| Prod (active incident, temporary) | `1` | `2000-5000` | `6` | `5000` | Reduce log volume; turn off immediately after incident triage. |

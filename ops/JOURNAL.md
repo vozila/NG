@@ -2,6 +2,26 @@
 
 **Timezone:** America/New_York
 
+## 2026-02-19 — Flow A realtime observability diagnostics hardening
+
+What changed:
+- Updated `features/voice_flow_a.py` with debug-gated realtime diagnostics focused on audio quality triage:
+  - sender stats (`q_bytes`, `frames_sent`, `underruns`, `late_ms_max`, `prebuf`)
+  - speech-control heartbeat (`qsize`, `active_response_id`)
+  - response lifecycle timing (`speech_ctrl_ACTIVE_DONE ... dt_ms=...`)
+  - explicit VAD/barge-in breadcrumbs.
+- Added env knobs:
+  - `VOICE_TWILIO_STATS_EVERY_MS` (default `1000`)
+  - `VOICE_TWILIO_PREBUFFER_FRAMES` (default `6`)
+  - `VOICE_SPEECH_CTRL_HEARTBEAT_MS` (default `2000`)
+- Added queue-bytes helper test coverage in `tests/test_voice_flow_a.py`.
+- Synced ops references/gotchas for interpretation and safe usage.
+
+Proof (<=5):
+- `ruff check features/voice_flow_a.py tests/test_voice_flow_a.py` ✅
+- `.venv/bin/python -m pytest -q tests/test_voice_flow_a.py` ✅ (`17 passed`)
+- `.venv/bin/python -m pytest -q` ✅ (`73 passed`)
+
 ## 2026-02-19 — TASK-0224/0225/0226/0227 delivery + ops sync
 
 What changed:

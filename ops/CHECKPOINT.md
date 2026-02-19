@@ -16,6 +16,7 @@
 - Flow A lifecycle events now persist caller metadata (`from_number`, `to_number`) on `flow_a.call_started` and `flow_a.call_stopped`.
 - Owner inbox endpoints are available behind gates (`VOZ_FEATURE_OWNER_INBOX`, `VOZ_OWNER_INBOX_ENABLED`).
 - Postcall SMS notifier is available behind gates (`VOZ_FEATURE_POSTCALL_NOTIFY_SMS`, `VOZ_POSTCALL_NOTIFY_SMS_ENABLED`).
+- Flow A now includes debug-gated realtime diagnostics for queue/pacing health and speech controller visibility.
 
 ## Last known good
 - Flow A OpenAI Realtime bridge: audio deltas received + Twilio μ-law frames sent + caller hears speech.
@@ -23,6 +24,8 @@
 - Known-good audible breadcrumbs:
   - `OPENAI_AUDIO_DELTA_FIRST ...`
   - `TWILIO_MAIN_FRAME_SENT first=1 ...`
+  - `twilio_send stats: q_bytes=... frames_sent=... underruns=... late_ms_max=... prebuf=...`
+  - `speech_ctrl_ACTIVE_DONE type=response.done response_id=... dt_ms=...`
 - Known-good post-call extraction evidence:
   - `flow_a.transcript_completed` includes `payload.transcript`
   - `/admin/postcall/extract` returns `ok: true`
@@ -38,3 +41,4 @@
 - Roll out caller metadata contract consumers across owner automations (inbox/notify workflows).
 - Validate owner inbox UI integration against normalized `/owner/inbox/*` endpoints.
 - Stage SMS notifier rollout (`dry_run` first, then enable live sends per tenant mapping).
+- Capture and baseline realtime diag thresholds (`underruns`, `late_ms_max`) during controlled call tests.
