@@ -8,6 +8,7 @@ from features.voice_flow_a import (
     OutgoingAudioBuffers,
     WaitingAudioController,
     _audio_queue_bytes,
+    _barge_in_allowed,
     _build_openai_session_update,
     _build_twilio_clear_msg,
     _chunk_to_frames,
@@ -135,6 +136,34 @@ def test_should_accept_response_audio_requires_active_response() -> None:
     assert _should_accept_response_audio(response_id=None, active_response_id="r1") is True
     assert _should_accept_response_audio(response_id="r1", active_response_id="r1") is True
     assert _should_accept_response_audio(response_id="r2", active_response_id="r1") is False
+
+
+def test_barge_in_allowed_requires_min_age_and_frames() -> None:
+    state = {"sent_main_frames_by_id": {"resp_1": 12}}
+    started = {"resp_1": 100.0}
+    assert (
+        _barge_in_allowed(
+            active_response_id="resp_1",
+            response_started_at=started,
+            response_state=state,
+            now_monotonic=100.2,
+            min_response_ms=450,
+            min_frames=15,
+        )
+        is False
+    )
+    state["sent_main_frames_by_id"]["resp_1"] = 16
+    assert (
+        _barge_in_allowed(
+            active_response_id="resp_1",
+            response_started_at=started,
+            response_state=state,
+            now_monotonic=100.5,
+            min_response_ms=450,
+            min_frames=15,
+        )
+        is True
+    )
 
 
 def test_build_twilio_clear_msg() -> None:

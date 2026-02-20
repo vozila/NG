@@ -80,6 +80,14 @@ def _speech_started_debounce_s() -> float:
     return max(0.0, _env_int("VOICE_VAD_SPEECH_STARTED_DEBOUNCE_MS", 300) / 1000.0)
 
 
+def _barge_in_min_response_ms() -> int:
+    return max(0, _env_int("VOICE_BARGE_IN_MIN_RESPONSE_MS", 450))
+
+
+def _barge_in_min_frames() -> int:
+    return max(0, _env_int("VOICE_BARGE_IN_MIN_FRAMES", 15))
+
+
 def _sanitize_transcript_for_event(transcript: str, max_chars: int = 500) -> str:
     cleaned = " ".join(transcript.split()).strip()
     if not cleaned:
@@ -294,6 +302,27 @@ def _should_accept_response_audio(*, response_id: str | None, active_response_id
     if response_id is None:
         return True
     return response_id == active_response_id
+
+
+def _barge_in_allowed(
+    *,
+    active_response_id: str | None,
+    response_started_at: dict[str, float],
+    response_state: dict[str, Any],
+    now_monotonic: float,
+    min_response_ms: int,
+    min_frames: int,
+) -> bool:
+    if not isinstance(active_response_id, str) or not active_response_id:
+        return False
+    started = response_started_at.get(active_response_id)
+    age_ms = int((now_monotonic - started) * 1000.0) if isinstance(started, float) else 0
+    sent_frames = 0
+    sent_map = response_state.get("sent_main_frames_by_id")
+    if isinstance(sent_map, dict):
+        raw = sent_map.get(active_response_id, 0)
+        sent_frames = int(raw) if isinstance(raw, int | float) else 0
+    return age_ms >= max(0, min_response_ms) and sent_frames >= max(0, min_frames)
 
 
 def _is_sender_underrun_state(*, response_state: dict[str, Any], buffers: OutgoingAudioBuffers) -> bool:
@@ -559,6 +588,13 @@ async def _twilio_sender_loop(
         if lane == "main":
             rid = response_state.get("active_response_id")
             if isinstance(rid, str):
+                sent_map = response_state.get("sent_main_frames_by_id")
+                if isinstance(sent_map, dict):
+                    current = sent_map.get(rid, 0)
+                    if isinstance(current, int):
+                        sent_map[rid] = current + 1
+                    else:
+                        sent_map[rid] = 1
                 if prebuf_open_for_rid != rid:
                     prebuf_open_for_rid = rid
                 if rid != prebuf_complete_logged_for_rid and len(buffers.main) >= prebuffer_frames:
@@ -640,6 +676,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
         "logged_twilio_main_frame_ids": set(),
         "logged_done_no_audio_ids": set(),
         "processed_response_done_ids": set(),
+        "sent_main_frames_by_id": {},
     }
 
     turn_seq = 0
@@ -765,19 +802,34 @@ async def twilio_stream(websocket: WebSocket) -> None:
 
                 _dbg("OpenAI VAD: user speech START")
                 if active_response_id:
-                    buffers.main.clear()
-                    wait_ctl.on_user_speech_started(buffers=buffers)
-
-                    sid = stream_sid_ref.get("streamSid")
-                    if sid:
-                        async with send_lock:
-                            await websocket.send_text(json.dumps(_build_twilio_clear_msg(sid)))
-                        _dbg("TWILIO_CLEAR_SENT")
-                    _dbg(
-                        "BARGE-IN: user speech started while AI speaking; "
-                        "canceling active response and clearing audio buffer."
+                    can_barge = _barge_in_allowed(
+                        active_response_id=active_response_id,
+                        response_started_at=response_started_at,
+                        response_state=response_state,
+                        now_monotonic=now,
+                        min_response_ms=_barge_in_min_response_ms(),
+                        min_frames=_barge_in_min_frames(),
                     )
-                    await openai_ws.send(json.dumps({"type": "response.cancel"}))
+                    if can_barge:
+                        buffers.main.clear()
+                        wait_ctl.on_user_speech_started(buffers=buffers)
+
+                        sid = stream_sid_ref.get("streamSid")
+                        if sid:
+                            async with send_lock:
+                                await websocket.send_text(json.dumps(_build_twilio_clear_msg(sid)))
+                            _dbg("TWILIO_CLEAR_SENT")
+                        _dbg(
+                            "BARGE-IN: user speech started while AI speaking; "
+                            "canceling active response and clearing audio buffer."
+                        )
+                        await openai_ws.send(json.dumps({"type": "response.cancel"}))
+                    else:
+                        _dbg(
+                            "BARGE-IN_IGNORED_EARLY "
+                            f"response_id={active_response_id} "
+                            f"min_ms={_barge_in_min_response_ms()} min_frames={_barge_in_min_frames()}"
+                        )
 
                 if not turn_logged_speech_started:
                     _dbg(f"OPENAI_SPEECH_STARTED turn={turn_seq}")
@@ -1017,6 +1069,9 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     response_started_at.pop(rid, None)
                     response_audio_diag.pop(rid, None)
                     response_last_frame.pop(rid, None)
+                    sent_map = response_state.get("sent_main_frames_by_id")
+                    if isinstance(sent_map, dict):
+                        sent_map.pop(rid, None)
                     if len(buffers.remainder) < FRAME_BYTES:
                         buffers.remainder.clear()
                 if rid is None:
