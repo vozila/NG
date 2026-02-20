@@ -1,6 +1,6 @@
 {
   "status": "fail",
-  "ts": 1771544303,
+  "ts": 1771546210,
   "enabled_features": [
     "boom_feature"
   ],
@@ -8,7 +8,7 @@
     {
       "feature": "boom_feature",
       "ok": false,
-      "ms": 0.01,
+      "ms": 0.0,
       "message": "RuntimeError: boom"
     }
   ],

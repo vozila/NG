@@ -228,6 +228,54 @@ def _audio_queue_bytes(buffers: OutgoingAudioBuffers) -> int:
     return (len(buffers.main) * FRAME_BYTES) + (len(buffers.aux) * FRAME_BYTES) + len(buffers.remainder)
 
 
+def _diag_init() -> dict[str, int]:
+    return {
+        "frames": 0,
+        "delta_chunks": 0,
+        "bytes": 0,
+        "same_as_prev_frames": 0,
+        "same_run_max": 0,
+        "same_run_cur": 0,
+        "low_diversity_frames": 0,
+        "silence_like_frames": 0,
+    }
+
+
+def _diag_update_frame(diag: dict[str, int], frame: bytes, prev_frame: bytes | None) -> bool:
+    diag["frames"] += 1
+    diag["bytes"] += len(frame)
+
+    uniq = len(set(frame))
+    if uniq <= 2:
+        diag["low_diversity_frames"] += 1
+    if uniq <= 1:
+        diag["silence_like_frames"] += 1
+
+    same_as_prev = prev_frame == frame and prev_frame is not None
+    if same_as_prev:
+        diag["same_as_prev_frames"] += 1
+        diag["same_run_cur"] += 1
+    else:
+        diag["same_run_cur"] = 1
+    if diag["same_run_cur"] > diag["same_run_max"]:
+        diag["same_run_max"] = diag["same_run_cur"]
+    return same_as_prev
+
+
+def _diag_score(diag: dict[str, int]) -> str:
+    frames = max(1, int(diag.get("frames", 0)))
+    same_ratio = float(diag.get("same_as_prev_frames", 0)) / float(frames)
+    low_div_ratio = float(diag.get("low_diversity_frames", 0)) / float(frames)
+    silence_ratio = float(diag.get("silence_like_frames", 0)) / float(frames)
+    same_run_max = int(diag.get("same_run_max", 0))
+
+    if (same_ratio > 0.85 and same_run_max >= 80) or silence_ratio > 0.95:
+        return "bad"
+    if same_ratio > 0.55 or low_div_ratio > 0.75 or same_run_max >= 40:
+        return "suspect"
+    return "ok"
+
+
 def _is_sender_underrun_state(*, response_state: dict[str, Any], buffers: OutgoingAudioBuffers) -> bool:
     active = response_state.get("active_response_id")
     if isinstance(active, str) and active:
@@ -543,6 +591,8 @@ async def twilio_stream(websocket: WebSocket) -> None:
     event_emit_enabled = _event_emit_enabled()
     call_stopped_emitted = False
     response_started_at: dict[str, float] = {}
+    response_audio_diag: dict[str, dict[str, int]] = {}
+    response_last_frame: dict[str, bytes] = {}
 
     def _drop_oldest_put(item: str) -> None:
         try:
@@ -735,6 +785,15 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     evt_rid = evt.get("response_id")
                     rid = evt_rid if isinstance(evt_rid, str) and evt_rid else active_response_id
                     if isinstance(rid, str):
+                        diag = response_audio_diag.setdefault(rid, _diag_init())
+                        diag["delta_chunks"] += 1
+                        prev = response_last_frame.get(rid)
+                        for f in frames:
+                            _diag_update_frame(diag, f, prev)
+                            prev = f
+                        if prev is not None:
+                            response_last_frame[rid] = prev
+
                         seen_audio_ids = response_state.get("seen_audio_ids")
                         if isinstance(seen_audio_ids, set):
                             seen_audio_ids.add(rid)
@@ -766,6 +825,15 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 evt_rid = evt.get("response_id")
                 rid = evt_rid if isinstance(evt_rid, str) and evt_rid else active_response_id
                 if isinstance(rid, str):
+                    diag = response_audio_diag.setdefault(rid, _diag_init())
+                    diag["delta_chunks"] += 1
+                    prev = response_last_frame.get(rid)
+                    for f in frames:
+                        _diag_update_frame(diag, f, prev)
+                        prev = f
+                    if prev is not None:
+                        response_last_frame[rid] = prev
+
                     seen_audio_ids = response_state.get("seen_audio_ids")
                     if isinstance(seen_audio_ids, set):
                         seen_audio_ids.add(rid)
@@ -793,6 +861,20 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     if isinstance(started, float):
                         dt_ms = int((time.monotonic() - started) * 1000.0)
                         _dbg(f"speech_ctrl_ACTIVE_DONE type=response.done response_id={rid} dt_ms={dt_ms}")
+                    diag = response_audio_diag.get(rid)
+                    if isinstance(diag, dict):
+                        score = _diag_score(diag)
+                        frames = max(1, int(diag.get("frames", 0)))
+                        same_ratio = float(diag.get("same_as_prev_frames", 0)) / float(frames)
+                        low_div_ratio = float(diag.get("low_diversity_frames", 0)) / float(frames)
+                        silence_ratio = float(diag.get("silence_like_frames", 0)) / float(frames)
+                        _dbg(
+                            "AUDIO_HEALTH "
+                            f"response_id={rid} score={score} frames={diag.get('frames',0)} "
+                            f"chunks={diag.get('delta_chunks',0)} bytes={diag.get('bytes',0)} "
+                            f"same_ratio={same_ratio:.2f} same_run_max={diag.get('same_run_max',0)} "
+                            f"low_div_ratio={low_div_ratio:.2f} silence_ratio={silence_ratio:.2f}"
+                        )
                 had_audio = False
 
                 if isinstance(rid, str) and rid:
@@ -833,6 +915,8 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     active_response_id = None
                     response_state["active_response_id"] = None
                     response_started_at.pop(rid, None)
+                    response_audio_diag.pop(rid, None)
+                    response_last_frame.pop(rid, None)
                     if len(buffers.remainder) < FRAME_BYTES:
                         buffers.remainder.clear()
                 if rid is None:

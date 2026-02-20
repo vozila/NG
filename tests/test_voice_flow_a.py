@@ -11,6 +11,9 @@ from features.voice_flow_a import (
     _build_openai_session_update,
     _build_twilio_clear_msg,
     _chunk_to_frames,
+    _diag_init,
+    _diag_score,
+    _diag_update_frame,
     _is_sender_underrun_state,
     _lifecycle_event_payload,
     _resolve_actor_mode_policy,
@@ -92,6 +95,26 @@ def test_is_sender_underrun_state_buffered_main_without_active_response() -> Non
     buffers.main.append(b"x" * 160)
     state = {"active_response_id": None}
     assert _is_sender_underrun_state(response_state=state, buffers=buffers) is True
+
+
+def test_diag_score_ok_for_varied_audio() -> None:
+    diag = _diag_init()
+    prev = None
+    for i in range(40):
+        frame = bytes((j + i) % 256 for j in range(160))
+        _diag_update_frame(diag, frame, prev)
+        prev = frame
+    assert _diag_score(diag) == "ok"
+
+
+def test_diag_score_bad_for_highly_repetitive_audio() -> None:
+    diag = _diag_init()
+    frame = b"\xff" * 160
+    prev = None
+    for _ in range(120):
+        _diag_update_frame(diag, frame, prev)
+        prev = frame
+    assert _diag_score(diag) == "bad"
 
 
 def test_build_twilio_clear_msg() -> None:
