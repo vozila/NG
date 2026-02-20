@@ -15,6 +15,8 @@ from features.voice_flow_a import (
     _diag_init,
     _diag_score,
     _diag_update_frame,
+    _force_input_commit_after_s,
+    _force_input_commit_enabled,
     _flush_on_response_created_enabled,
     _flush_output_audio_buffers,
     _initial_greeting_enabled,
@@ -168,6 +170,20 @@ def test_flush_on_response_created_enabled_default_on(monkeypatch) -> None:
 def test_flush_on_response_created_enabled_override_off(monkeypatch) -> None:
     monkeypatch.setenv("VOICE_FLUSH_ON_RESPONSE_CREATED", "0")
     assert _flush_on_response_created_enabled() is False
+
+
+def test_force_input_commit_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("VOICE_FORCE_INPUT_COMMIT_FALLBACK", raising=False)
+    monkeypatch.delenv("VOICE_FORCE_INPUT_COMMIT_MS", raising=False)
+    assert _force_input_commit_enabled() is True
+    assert _force_input_commit_after_s() == 1.4
+
+
+def test_force_input_commit_env_overrides(monkeypatch) -> None:
+    monkeypatch.setenv("VOICE_FORCE_INPUT_COMMIT_FALLBACK", "0")
+    monkeypatch.setenv("VOICE_FORCE_INPUT_COMMIT_MS", "900")
+    assert _force_input_commit_enabled() is False
+    assert _force_input_commit_after_s() == 0.9
 
 
 def test_should_accept_response_audio_requires_active_response() -> None:

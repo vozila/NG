@@ -113,6 +113,19 @@ def _initial_greeting_text() -> str:
     )
 
 
+def _force_input_commit_enabled() -> bool:
+    return (os.getenv("VOICE_FORCE_INPUT_COMMIT_FALLBACK") or "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _force_input_commit_after_s() -> float:
+    return max(0.2, _env_int("VOICE_FORCE_INPUT_COMMIT_MS", 1400) / 1000.0)
+
+
 def _sanitize_transcript_for_event(transcript: str, max_chars: int = 500) -> str:
     cleaned = " ".join(transcript.split()).strip()
     if not cleaned:
@@ -727,6 +740,8 @@ async def twilio_stream(websocket: WebSocket) -> None:
     event_emit_enabled = _event_emit_enabled()
     call_stopped_emitted = False
     last_speech_started_ts: float | None = None
+    pending_speech_started_at: float | None = None
+    pending_input_commit_sent = False
     twilio_media_frames_rx = 0
     last_media_rx_ts: float | None = None
     ws_started_at = time.monotonic()
@@ -770,6 +785,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
         nonlocal active_response_id, openai_output_modalities
         nonlocal turn_seq, turn_logged_speech_started, turn_logged_transcript, turn_logged_response_create
         nonlocal last_speech_started_ts
+        nonlocal pending_speech_started_at, pending_input_commit_sent
 
         while True:
             raw = await openai_ws.recv()
@@ -832,6 +848,8 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     )
                     continue
                 last_speech_started_ts = now
+                pending_speech_started_at = now
+                pending_input_commit_sent = False
                 turn_seq += 1
                 turn_logged_speech_started = False
                 turn_logged_transcript = False
@@ -891,6 +909,16 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     turn_logged_speech_started = True
                 continue
 
+            if etype == "input_audio_buffer.speech_stopped":
+                if _force_input_commit_enabled() and openai_ws is not None:
+                    try:
+                        await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
+                        pending_input_commit_sent = True
+                        _dbg("OPENAI_INPUT_COMMIT_SENT reason=speech_stopped")
+                    except Exception as e:
+                        _dbg(f"OPENAI_INPUT_COMMIT_FAILED reason=speech_stopped err={e!r}")
+                continue
+
             if etype == "conversation.item.input_audio_transcription.completed":
                 transcript = (evt.get("transcript") or "").strip()
                 if not transcript:
@@ -899,6 +927,8 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 if not turn_logged_transcript:
                     _dbg(f"OPENAI_TRANSCRIPT completed len={len(transcript)} turn={turn_seq}")
                     turn_logged_transcript = True
+                pending_speech_started_at = None
+                pending_input_commit_sent = False
 
                 await _emit_flow_a_event(
                     enabled=event_emit_enabled,
@@ -1180,7 +1210,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
             _dbg(f"OPENAI_INITIAL_GREETING_FAILED err={e!r}")
 
     async def _speech_ctrl_heartbeat_loop() -> None:
-        nonlocal logged_media_absent
+        nonlocal logged_media_absent, pending_input_commit_sent, pending_speech_started_at
         every_s = max(0.5, _env_int("VOICE_SPEECH_CTRL_HEARTBEAT_MS", 2000) / 1000.0)
         while True:
             await asyncio.sleep(every_s)
@@ -1195,6 +1225,24 @@ async def twilio_stream(websocket: WebSocket) -> None:
             if not logged_media_absent and twilio_media_frames_rx == 0 and (now - ws_started_at) >= 5.0:
                 _dbg("TWILIO_MEDIA_NOT_RECEIVED_AFTER_5S")
                 logged_media_absent = True
+            if (
+                _force_input_commit_enabled()
+                and bridge_enabled
+                and openai_ws is not None
+                and pending_speech_started_at is not None
+                and not pending_input_commit_sent
+                and active_response_id is None
+                and (now - pending_speech_started_at) >= _force_input_commit_after_s()
+            ):
+                try:
+                    await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
+                    pending_input_commit_sent = True
+                    _dbg(
+                        "OPENAI_INPUT_COMMIT_SENT "
+                        f"reason=heartbeat_fallback dt_ms={int((now - pending_speech_started_at) * 1000.0)}"
+                    )
+                except Exception as e:
+                    _dbg(f"OPENAI_INPUT_COMMIT_FAILED reason=heartbeat_fallback err={e!r}")
 
     try:
         sender_task = asyncio.create_task(
