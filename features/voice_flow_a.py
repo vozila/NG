@@ -142,18 +142,20 @@ def _effective_prebuffer_frames(main_max_frames: int) -> int:
 
 def _playout_start_frames(prebuffer_frames: int) -> int:
     # Startup jitter buffer (backend-style): wait for a small runway before first send.
-    target = _env_int("VOICE_TWILIO_START_BUFFER_FRAMES", 18)
+    target = _env_int("VOICE_TWILIO_START_BUFFER_FRAMES", 24)
     return max(4, min(target, prebuffer_frames))
 
 
 def _playout_low_water_frames(start_frames: int) -> int:
-    # Once started, briefly hold when queue dips too low to avoid early garble/chop.
-    target = _env_int("VOICE_TWILIO_LOW_WATER_FRAMES", max(6, start_frames // 2))
+    # Optional hysteresis; default disabled to avoid rebuffer oscillation after playout starts.
+    target = _env_int("VOICE_TWILIO_LOW_WATER_FRAMES", 0)
+    if target <= 0:
+        return 0
     return max(2, min(target, start_frames))
 
 
 def _playout_refill_hold_s() -> float:
-    return max(0.0, _env_int("VOICE_TWILIO_REFILL_HOLD_MS", 120) / 1000.0)
+    return max(0.0, _env_int("VOICE_TWILIO_REFILL_HOLD_MS", 0) / 1000.0)
 
 
 def _sanitize_transcript_for_event(transcript: str, max_chars: int = 500) -> str:
@@ -563,48 +565,12 @@ async def _twilio_sender_loop(
             playout_started_ids = response_state.get("playout_started_ids")
             refill_wait_started_by_id = response_state.get("refill_wait_started_by_id")
             rid_done = isinstance(done_ids, set) and isinstance(rid, str) and rid in done_ids
-            if (
-                isinstance(rid, str)
-                and rid
-                and playout_start_frames > 0
-                and prebuf_open_for_rid != rid
-                and len(buffers.main) < playout_start_frames
-                and not rid_done
-            ):
-                prebuf_waits += 1
-                last_send_ts = None
-                last_send_rid = None
-                now = time.monotonic()
-                if now >= next_due:
-                    idle_late_ms_max = max(idle_late_ms_max, (now - next_due) * 1000.0)
-                    next_due = now + FRAME_SLEEP_S
-                if now - stats_started >= stats_every_s:
-                    prebuf = True
-                    _dbg(
-                        f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
-                        f"frames_sent={frames_sent} underruns={underruns} idle_ticks={idle_ticks} "
-                        f"prebuf_waits={prebuf_waits} late_ms_max={late_ms_max:.1f} prebuf={prebuf}"
-                        f" idle_late_ms_max={idle_late_ms_max:.1f} "
-                        f"send_gap_ms_max={send_gap_ms_max:.1f} "
-                        f"send_stall_warn_count={send_stall_warn_count} "
-                        f"send_stall_crit_count={send_stall_crit_count}"
-                    )
-                    stats_started = now
-                    frames_sent = 0
-                    underruns = 0
-                    idle_ticks = 0
-                    prebuf_waits = 0
-                    late_ms_max = 0.0
-                    idle_late_ms_max = 0.0
-                    send_stall_warn_count = 0
-                    send_stall_crit_count = 0
-                    send_gap_ms_max = 0.0
-                await asyncio.sleep(0.01)
-                continue
             if isinstance(rid, str) and rid and isinstance(playout_started_ids, set):
                 # Startup runway: do not start sending until a small buffer is ready.
                 if rid not in playout_started_ids and not rid_done and len(buffers.main) < playout_start_frames:
                     prebuf_waits += 1
+                    last_send_ts = None
+                    last_send_rid = None
                     await asyncio.sleep(0.01)
                     continue
                 if rid not in playout_started_ids:
