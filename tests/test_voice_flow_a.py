@@ -11,6 +11,7 @@ from features.voice_flow_a import (
     _barge_in_allowed,
     _build_openai_session_update,
     _build_twilio_clear_msg,
+    _build_twilio_mark_msg,
     _chunk_to_frames,
     _diag_init,
     _diag_score,
@@ -29,6 +30,9 @@ from features.voice_flow_a import (
     _sanitize_transcript_for_event,
     _should_accept_response_audio,
     _speech_started_debounce_s,
+    _twilio_chunk_frames,
+    _twilio_chunk_mode_enabled,
+    _twilio_mark_enabled,
 )
 
 
@@ -241,6 +245,37 @@ def test_barge_in_allowed_requires_min_age_and_frames() -> None:
 
 def test_build_twilio_clear_msg() -> None:
     assert _build_twilio_clear_msg("MZ123") == {"event": "clear", "streamSid": "MZ123"}
+
+
+def test_build_twilio_mark_msg() -> None:
+    assert _build_twilio_mark_msg("MZ123", "m1") == {
+        "event": "mark",
+        "streamSid": "MZ123",
+        "mark": {"name": "m1"},
+    }
+
+
+def test_twilio_chunk_mode_env(monkeypatch) -> None:
+    monkeypatch.delenv("VOICE_TWILIO_CHUNK_MODE", raising=False)
+    assert _twilio_chunk_mode_enabled() is False
+    monkeypatch.setenv("VOICE_TWILIO_CHUNK_MODE", "1")
+    assert _twilio_chunk_mode_enabled() is True
+
+
+def test_twilio_chunk_frames_clamped(monkeypatch) -> None:
+    monkeypatch.delenv("VOICE_TWILIO_CHUNK_MS", raising=False)
+    assert _twilio_chunk_frames() == 6  # 120ms / 20ms
+    monkeypatch.setenv("VOICE_TWILIO_CHUNK_MS", "5")
+    assert _twilio_chunk_frames() == 1
+    monkeypatch.setenv("VOICE_TWILIO_CHUNK_MS", "500")
+    assert _twilio_chunk_frames() == 20
+
+
+def test_twilio_mark_enabled_env(monkeypatch) -> None:
+    monkeypatch.delenv("VOICE_TWILIO_MARK_ENABLED", raising=False)
+    assert _twilio_mark_enabled() is True
+    monkeypatch.setenv("VOICE_TWILIO_MARK_ENABLED", "0")
+    assert _twilio_mark_enabled() is False
 
 
 def test_build_openai_session_update_uses_legacy_ulaw_session_schema() -> None:

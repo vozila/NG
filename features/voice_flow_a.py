@@ -185,6 +185,29 @@ def _minimal_hot_path_enabled() -> bool:
     )
 
 
+def _twilio_chunk_mode_enabled() -> bool:
+    return (os.getenv("VOICE_TWILIO_CHUNK_MODE") or "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _twilio_chunk_frames() -> int:
+    ms = max(20, min(400, _env_int("VOICE_TWILIO_CHUNK_MS", 120)))
+    return max(1, ms // FRAME_MS)
+
+
+def _twilio_mark_enabled() -> bool:
+    return (os.getenv("VOICE_TWILIO_MARK_ENABLED") or "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
 def _sanitize_transcript_for_event(transcript: str, max_chars: int = 500) -> str:
     cleaned = " ".join(transcript.split()).strip()
     if not cleaned:
@@ -329,6 +352,10 @@ def _build_twilio_media_msg(stream_sid: str, ulaw_frame: bytes) -> dict[str, Any
 
 def _build_twilio_clear_msg(stream_sid: str) -> dict[str, Any]:
     return {"event": "clear", "streamSid": stream_sid}
+
+
+def _build_twilio_mark_msg(stream_sid: str, name: str) -> dict[str, Any]:
+    return {"event": "mark", "streamSid": stream_sid, "mark": {"name": name}}
 
 
 def _chunk_to_frames(remainder: bytearray, chunk: bytes, *, frame_bytes: int = FRAME_BYTES) -> list[bytes]:
@@ -555,6 +582,9 @@ async def _twilio_sender_loop(
 ) -> None:
     """Send frames to Twilio at ~20ms pacing. Prefer main lane, then aux."""
     minimal_hot_path = _minimal_hot_path_enabled()
+    chunk_mode = _twilio_chunk_mode_enabled()
+    chunk_frames = _twilio_chunk_frames()
+    mark_enabled = _twilio_mark_enabled()
     stats_every_s = max(0.25, _env_int("VOICE_TWILIO_STATS_EVERY_MS", 1000) / 1000.0)
     prebuffer_frames = _effective_prebuffer_frames(buffers.main_max_frames)
     playout_start_frames = _playout_start_frames(prebuffer_frames)
@@ -581,6 +611,7 @@ async def _twilio_sender_loop(
     sid_for_fast_json: str | None = None
     fast_json_prefix = ""
     fast_json_suffix = '"}}'
+    mark_seq = 0
 
     while True:
         sid = stream_sid_ref.get("streamSid")
@@ -595,6 +626,41 @@ async def _twilio_sender_loop(
         frame: bytes | None = None
         lane = "none"
         rid_for_send: str | None = None
+
+        if chunk_mode:
+            chunk_parts: list[bytes] = []
+            if buffers.main:
+                lane = "main"
+                rid_for_send = response_state.get("active_response_id")
+                n = min(chunk_frames, len(buffers.main))
+                for _ in range(n):
+                    chunk_parts.append(buffers.main.popleft())
+            elif wait_ctl.aux_enabled and buffers.aux:
+                lane = "aux"
+                n = min(chunk_frames, len(buffers.aux))
+                for _ in range(n):
+                    chunk_parts.append(buffers.aux.popleft())
+
+            if not chunk_parts:
+                await asyncio.sleep(0.005)
+                continue
+
+            chunk_bytes = b"".join(chunk_parts)
+            msg = _build_twilio_media_msg(sid, chunk_bytes)
+            async with send_lock:
+                await websocket.send_text(json.dumps(msg))
+                if mark_enabled and lane == "main":
+                    mark_seq += 1
+                    await websocket.send_text(
+                        json.dumps(_build_twilio_mark_msg(sid, f"m{mark_seq}"))
+                    )
+
+            if lane == "main" and isinstance(rid_for_send, str):
+                sent_map = response_state.get("sent_main_frames_by_id")
+                if isinstance(sent_map, dict):
+                    cur = sent_map.get(rid_for_send, 0)
+                    sent_map[rid_for_send] = int(cur) + len(chunk_parts)
+            continue
 
         if minimal_hot_path:
             if buffers.main:
