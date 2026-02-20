@@ -88,6 +88,22 @@ def _barge_in_min_frames() -> int:
     return max(0, _env_int("VOICE_BARGE_IN_MIN_FRAMES", 15))
 
 
+def _initial_greeting_enabled() -> bool:
+    return (os.getenv("VOZ_FLOW_A_INITIAL_GREETING_ENABLED") or "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _initial_greeting_text() -> str:
+    return (
+        (os.getenv("VOZ_FLOW_A_INITIAL_GREETING_TEXT") or "").strip()
+        or "Please greet the caller briefly and ask how you can help."
+    )
+
+
 def _sanitize_transcript_for_event(transcript: str, max_chars: int = 500) -> str:
     cleaned = " ".join(transcript.split()).strip()
     if not cleaned:
@@ -694,6 +710,10 @@ async def twilio_stream(websocket: WebSocket) -> None:
     event_emit_enabled = _event_emit_enabled()
     call_stopped_emitted = False
     last_speech_started_ts: float | None = None
+    twilio_media_frames_rx = 0
+    last_media_rx_ts: float | None = None
+    ws_started_at = time.monotonic()
+    logged_media_absent = False
     response_started_at: dict[str, float] = {}
     response_audio_diag: dict[str, dict[str, int]] = {}
     response_last_frame: dict[str, bytes] = {}
@@ -1086,15 +1106,48 @@ async def twilio_stream(websocket: WebSocket) -> None:
         await openai_ws.send(json.dumps(_build_openai_session_update(voice=voice, instructions=instructions)))
         openai_input_blocked_unknown_param = False
 
+    async def _maybe_send_initial_greeting() -> None:
+        if not _initial_greeting_enabled():
+            return
+        if openai_ws is None:
+            return
+        prompt = _initial_greeting_text()
+        try:
+            await openai_ws.send(
+                json.dumps(
+                    {
+                        "type": "conversation.item.create",
+                        "item": {
+                            "type": "message",
+                            "role": "user",
+                            "content": [{"type": "input_text", "text": prompt}],
+                        },
+                    }
+                )
+            )
+            await openai_ws.send(
+                json.dumps({"type": "response.create", "response": {"modalities": ["audio", "text"]}})
+            )
+            _dbg("OPENAI_INITIAL_GREETING_SENT")
+        except Exception as e:
+            _dbg(f"OPENAI_INITIAL_GREETING_FAILED err={e!r}")
+
     async def _speech_ctrl_heartbeat_loop() -> None:
+        nonlocal logged_media_absent
         every_s = max(0.5, _env_int("VOICE_SPEECH_CTRL_HEARTBEAT_MS", 2000) / 1000.0)
         while True:
             await asyncio.sleep(every_s)
+            now = time.monotonic()
+            media_idle_ms = int((now - (last_media_rx_ts or ws_started_at)) * 1000.0)
             _dbg(
                 "speech_ctrl_HEARTBEAT "
                 f"enabled={bridge_enabled} shadow=False qsize={in_q.qsize()} "
-                f"active_response_id={response_state.get('active_response_id')}"
+                f"active_response_id={response_state.get('active_response_id')} "
+                f"media_rx_frames={twilio_media_frames_rx} media_idle_ms={media_idle_ms}"
             )
+            if not logged_media_absent and twilio_media_frames_rx == 0 and (now - ws_started_at) >= 5.0:
+                _dbg("TWILIO_MEDIA_NOT_RECEIVED_AFTER_5S")
+                logged_media_absent = True
 
     try:
         sender_task = asyncio.create_task(
@@ -1181,6 +1234,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
                         _dbg("OPENAI_SESSION_UPDATE_SENT")
                         in_task = asyncio.create_task(_twilio_to_openai_loop())
                         out_task = asyncio.create_task(_openai_to_twilio_loop())
+                        await _maybe_send_initial_greeting()
                     except Exception as e:
                         _dbg(f"OPENAI_CONNECT_FAILED err={e!r}")
 
@@ -1190,6 +1244,8 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 if bridge_enabled and openai_ws is not None:
                     payload = (evt.get("media") or {}).get("payload")
                     if isinstance(payload, str) and payload:
+                        twilio_media_frames_rx += 1
+                        last_media_rx_ts = time.monotonic()
                         _drop_oldest_put(payload)
                 continue
 

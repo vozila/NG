@@ -15,6 +15,8 @@ from features.voice_flow_a import (
     _diag_init,
     _diag_score,
     _diag_update_frame,
+    _initial_greeting_enabled,
+    _initial_greeting_text,
     _is_sender_underrun_state,
     _lifecycle_event_payload,
     _resolve_actor_mode_policy,
@@ -128,6 +130,20 @@ def test_vad_speech_started_debounce_env_default(monkeypatch) -> None:
 def test_vad_speech_started_debounce_env_override(monkeypatch) -> None:
     monkeypatch.setenv("VOICE_VAD_SPEECH_STARTED_DEBOUNCE_MS", "450")
     assert _speech_started_debounce_s() == 0.45
+
+
+def test_initial_greeting_env_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("VOZ_FLOW_A_INITIAL_GREETING_ENABLED", raising=False)
+    monkeypatch.delenv("VOZ_FLOW_A_INITIAL_GREETING_TEXT", raising=False)
+    assert _initial_greeting_enabled() is False
+    assert _initial_greeting_text() == "Please greet the caller briefly and ask how you can help."
+
+
+def test_initial_greeting_env_overrides(monkeypatch) -> None:
+    monkeypatch.setenv("VOZ_FLOW_A_INITIAL_GREETING_ENABLED", "1")
+    monkeypatch.setenv("VOZ_FLOW_A_INITIAL_GREETING_TEXT", "Say hello.")
+    assert _initial_greeting_enabled() is True
+    assert _initial_greeting_text() == "Say hello."
 
 
 def test_should_accept_response_audio_requires_active_response() -> None:
