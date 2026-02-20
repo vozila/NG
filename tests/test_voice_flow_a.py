@@ -18,6 +18,7 @@ from features.voice_flow_a import (
     _lifecycle_event_payload,
     _resolve_actor_mode_policy,
     _sanitize_transcript_for_event,
+    _should_accept_response_audio,
     _speech_started_debounce_s,
 )
 
@@ -126,6 +127,14 @@ def test_vad_speech_started_debounce_env_default(monkeypatch) -> None:
 def test_vad_speech_started_debounce_env_override(monkeypatch) -> None:
     monkeypatch.setenv("VOICE_VAD_SPEECH_STARTED_DEBOUNCE_MS", "450")
     assert _speech_started_debounce_s() == 0.45
+
+
+def test_should_accept_response_audio_requires_active_response() -> None:
+    assert _should_accept_response_audio(response_id=None, active_response_id=None) is False
+    assert _should_accept_response_audio(response_id="r1", active_response_id=None) is False
+    assert _should_accept_response_audio(response_id=None, active_response_id="r1") is True
+    assert _should_accept_response_audio(response_id="r1", active_response_id="r1") is True
+    assert _should_accept_response_audio(response_id="r2", active_response_id="r1") is False
 
 
 def test_build_twilio_clear_msg() -> None:

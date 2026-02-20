@@ -288,6 +288,14 @@ def _diag_score(diag: dict[str, int]) -> str:
     return "ok"
 
 
+def _should_accept_response_audio(*, response_id: str | None, active_response_id: str | None) -> bool:
+    if not isinstance(active_response_id, str) or not active_response_id:
+        return False
+    if response_id is None:
+        return True
+    return response_id == active_response_id
+
+
 def _is_sender_underrun_state(*, response_state: dict[str, Any], buffers: OutgoingAudioBuffers) -> bool:
     active = response_state.get("active_response_id")
     if isinstance(active, str) and active:
@@ -413,7 +421,7 @@ async def _twilio_sender_loop(
 ) -> None:
     """Send frames to Twilio at ~20ms pacing. Prefer main lane, then aux."""
     stats_every_s = max(0.25, _env_int("VOICE_TWILIO_STATS_EVERY_MS", 1000) / 1000.0)
-    prebuffer_frames = max(0, _env_int("VOICE_TWILIO_PREBUFFER_FRAMES", 6))
+    prebuffer_frames = max(0, _env_int("VOICE_TWILIO_PREBUFFER_FRAMES", 50))
     stall_warn_ms = max(20.0, _env_float("VOICE_SEND_STALL_WARN_MS", 35.0))
     stall_crit_ms = max(stall_warn_ms + 5.0, _env_float("VOICE_SEND_STALL_CRIT_MS", 60.0))
     stats_started = time.monotonic()
@@ -756,16 +764,15 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 turn_logged_response_create = False
 
                 _dbg("OpenAI VAD: user speech START")
-                buffers.main.clear()
-                wait_ctl.on_user_speech_started(buffers=buffers)
-
-                sid = stream_sid_ref.get("streamSid")
-                if sid:
-                    async with send_lock:
-                        await websocket.send_text(json.dumps(_build_twilio_clear_msg(sid)))
-                    _dbg("TWILIO_CLEAR_SENT")
-
                 if active_response_id:
+                    buffers.main.clear()
+                    wait_ctl.on_user_speech_started(buffers=buffers)
+
+                    sid = stream_sid_ref.get("streamSid")
+                    if sid:
+                        async with send_lock:
+                            await websocket.send_text(json.dumps(_build_twilio_clear_msg(sid)))
+                        _dbg("TWILIO_CLEAR_SENT")
                     _dbg(
                         "BARGE-IN: user speech started while AI speaking; "
                         "canceling active response and clearing audio buffer."
@@ -844,6 +851,17 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 part = evt.get("part") if isinstance(evt.get("part"), dict) else {}
                 audio_b64 = part.get("audio")
                 if isinstance(audio_b64, str) and audio_b64:
+                    evt_rid = evt.get("response_id")
+                    response_id = evt_rid if isinstance(evt_rid, str) and evt_rid else None
+                    if not _should_accept_response_audio(
+                        response_id=response_id,
+                        active_response_id=active_response_id,
+                    ):
+                        _dbg(
+                            "OPENAI_AUDIO_DROPPED "
+                            f"response_id={response_id} active_response_id={active_response_id}"
+                        )
+                        continue
                     try:
                         chunk = base64.b64decode(audio_b64)
                     except Exception:
@@ -855,7 +873,6 @@ async def twilio_stream(websocket: WebSocket) -> None:
                             buffers.main.popleft()
                         buffers.main.append(f)
 
-                    evt_rid = evt.get("response_id")
                     rid = evt_rid if isinstance(evt_rid, str) and evt_rid else active_response_id
                     if isinstance(rid, str):
                         diag = response_audio_diag.setdefault(rid, _diag_init())
@@ -884,6 +901,17 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 delta_b64 = evt.get("delta")
                 if not isinstance(delta_b64, str) or not delta_b64:
                     continue
+                evt_rid = evt.get("response_id")
+                response_id = evt_rid if isinstance(evt_rid, str) and evt_rid else None
+                if not _should_accept_response_audio(
+                    response_id=response_id,
+                    active_response_id=active_response_id,
+                ):
+                    _dbg(
+                        "OPENAI_AUDIO_DROPPED "
+                        f"response_id={response_id} active_response_id={active_response_id}"
+                    )
+                    continue
                 try:
                     chunk = base64.b64decode(delta_b64)
                 except Exception:
@@ -895,7 +923,6 @@ async def twilio_stream(websocket: WebSocket) -> None:
                         buffers.main.popleft()
                     buffers.main.append(f)
 
-                evt_rid = evt.get("response_id")
                 rid = evt_rid if isinstance(evt_rid, str) and evt_rid else active_response_id
                 if isinstance(rid, str):
                     diag = response_audio_diag.setdefault(rid, _diag_init())
