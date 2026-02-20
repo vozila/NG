@@ -1,0 +1,48 @@
+2026-02-20 19:50:00  [0;32m[1m==> [0m[1mDetected service running on port 10000[0m
+2026-02-20 19:50:00  [0;32m[1m==> [0m[1mDocs on specifying a port: https://render.com/docs/web-services#port-binding[0m
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T19:52:53Z end=2026-02-20T19:52:55Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T19:52:58Z end=2026-02-20T19:53:00Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")

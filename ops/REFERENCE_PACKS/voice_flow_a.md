@@ -129,3 +129,27 @@ Recommended defaults by environment:
 | Staging (short test window) | `1` | `1000-2000` | `6` | `2000-5000` | Use for bounded test calls; disable after capture. |
 | Prod (normal) | `0` | `1000` | `6` | `2000` | Knobs may remain set, but logs stay off with debug disabled. |
 | Prod (active incident, temporary) | `1` | `2000-5000` | `6` | `5000` | Reduce log volume; turn off immediately after incident triage. |
+
+## 9) Deterministic operator commands (Render logs)
+Use these exact command shapes so incident triage is repeatable:
+
+```bash
+# Capture (resource poll mode; keeps retrying through Render API 500s)
+RENDER_RESOURCE_ID='srv-xxxxxxxx' INTERVAL_S=2 FETCH_LIMIT=500 LOOKBACK_SECONDS=120 \
+  ./scripts/capture_render_logs.sh
+
+# Analyze newest files by mtime (accepted + ignored_early summaries)
+python3 scripts/analyze_bargein_latency.py \
+  --glob 'ops/logs/vozlia-ng-*.log' --sort-by mtime --last-files 12
+
+# Analyze one call/rid deterministically
+python3 scripts/analyze_bargein_latency.py \
+  --glob 'ops/logs/vozlia-ng-*.log' --sort-by mtime --last-files 0 \
+  --rid CAc831a7d96e916c63500593e0976af84a
+
+# Extract call window for one rid
+python3 scripts/extract_call_window.py \
+  --glob 'ops/logs/vozlia-ng-*.log' --sort-by mtime --last-files 0 \
+  --rid CAc831a7d96e916c63500593e0976af84a \
+  --out ops/logs/extract-CAc831a7d96e916c63500593e0976af84a-b001.log
+```

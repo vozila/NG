@@ -26,6 +26,9 @@ from features.voice_flow_a import (
     _initial_greeting_text,
     _is_sender_underrun_state,
     _lifecycle_event_payload,
+    _playout_low_water_frames,
+    _playout_refill_hold_s,
+    _playout_start_frames,
     _resolve_actor_mode_policy,
     _sanitize_transcript_for_event,
     _should_accept_response_audio,
@@ -205,6 +208,39 @@ def test_effective_prebuffer_frames_has_guardrail(monkeypatch) -> None:
     assert _effective_prebuffer_frames(200) == 120
     monkeypatch.setenv("VOICE_TWILIO_PREBUFFER_FRAMES", "500")
     assert _effective_prebuffer_frames(200) == 199
+
+
+def test_playout_start_frames_clamped_to_safe_range(monkeypatch) -> None:
+    monkeypatch.delenv("VOICE_TWILIO_START_BUFFER_FRAMES", raising=False)
+    assert _playout_start_frames(80) == 24
+
+    monkeypatch.setenv("VOICE_TWILIO_START_BUFFER_FRAMES", "2")
+    assert _playout_start_frames(80) == 4
+
+    monkeypatch.setenv("VOICE_TWILIO_START_BUFFER_FRAMES", "120")
+    assert _playout_start_frames(30) == 30
+
+
+def test_playout_low_water_frames_defaults_off_and_clamps(monkeypatch) -> None:
+    monkeypatch.delenv("VOICE_TWILIO_LOW_WATER_FRAMES", raising=False)
+    assert _playout_low_water_frames(24) == 0
+
+    monkeypatch.setenv("VOICE_TWILIO_LOW_WATER_FRAMES", "1")
+    assert _playout_low_water_frames(24) == 2
+
+    monkeypatch.setenv("VOICE_TWILIO_LOW_WATER_FRAMES", "50")
+    assert _playout_low_water_frames(24) == 24
+
+
+def test_playout_refill_hold_seconds(monkeypatch) -> None:
+    monkeypatch.delenv("VOICE_TWILIO_REFILL_HOLD_MS", raising=False)
+    assert _playout_refill_hold_s() == 0.0
+
+    monkeypatch.setenv("VOICE_TWILIO_REFILL_HOLD_MS", "120")
+    assert _playout_refill_hold_s() == 0.12
+
+    monkeypatch.setenv("VOICE_TWILIO_REFILL_HOLD_MS", "-5")
+    assert _playout_refill_hold_s() == 0.0
 
 
 def test_should_accept_response_audio_requires_active_response() -> None:

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 # Capture Render logs into rotating files under ops/logs.
 # This script supports two modes:
@@ -43,7 +44,7 @@ echo "capture_render_logs: rotate_seconds=${ROTATE_SECONDS} rotate_bytes=${ROTAT
 if [[ -n "${RENDER_RESOURCE_ID}" ]]; then
   echo "capture_render_logs: mode=render_poll resource_id=${RENDER_RESOURCE_ID} interval_s=${INTERVAL_S} fetch_limit=${FETCH_LIMIT}"
 else
-  echo "capture_render_logs: mode=stream command=${RENDER_LOG_CMD}"
+  echo "capture_render_logs: mode=stream command=<redacted>"
 fi
 
 shopt -s nullglob
@@ -116,9 +117,21 @@ append_line() {
     prune_old_files
     new_log_file
   fi
+  line="$(sanitize_line "${line}")"
   printf '%s\n' "${line}"
   printf '%s\n' "${line}" >> "${current_file}"
   current_bytes=$((current_bytes + ${#line} + 1))
+}
+
+sanitize_line() {
+  local line="$1"
+  if [[ -n "${RENDER_RESOURCE_ID}" ]]; then
+    line="${line//${RENDER_RESOURCE_ID}/<render_resource_id>}"
+  fi
+  line="$(printf '%s' "${line}" | sed -E \
+    -e 's/(Bearer )[A-Za-z0-9._~+\/=-]+/\1<redacted>/g' \
+    -e 's/([?&](token|api[_-]?key|key|secret)=)[^& ]+/\1<redacted>/Ig')"
+  printf '%s\n' "${line}"
 }
 
 new_log_file

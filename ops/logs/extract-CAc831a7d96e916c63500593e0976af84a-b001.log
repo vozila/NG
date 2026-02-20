@@ -1,0 +1,545 @@
+2026-02-20 18:14:27  2026-02-20 18:14:27,032 INFO vozlia_ng TWILIO_WS_START streamSid=MZc68b4556470411707c0bc226ad7ee494 callSid=CAc831a7d96e916c63500593e0976af84a from=+19178057859 tenant=tenant_demo tenant_mode=shared rid=CAc831a7d96e916c63500593e0976af84a ai_mode=owner
+2026-02-20 18:14:27  2026-02-20 18:14:27,032 INFO vozlia_ng VOICE_FLOW_A_START tenant_id=tenant_demo tenant_mode=shared rid=CAc831a7d96e916c63500593e0976af84a ai_mode=owner
+2026-02-20 18:14:27  2026-02-20 18:14:27,032 INFO vozlia_ng VOICE_FLOW_A_MODE_SELECTED ai_mode=owner tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:14:27  2026-02-20 18:14:27,043 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.call_started tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:14:27  2026-02-20 18:14:27,645 INFO vozlia_ng OPENAI_WS_CONNECTED
+2026-02-20 18:14:27  2026-02-20 18:14:27,645 INFO vozlia_ng OPENAI_SESSION_UPDATE_SENT
+2026-02-20 18:14:27  2026-02-20 18:14:27,650 INFO vozlia_ng OPENAI_SESSION_CREATED keys=['object', 'id', 'model', 'modalities', 'instructions', 'voice', 'output_audio_format', 'tools', 'tool_choice', 'temperature', 'max_response_output_tokens', 'turn_detection', 'speed', 'tracing', 'truncation', 'prompt', 'expires_at', 'input_audio_noise_reduction', 'input_audio_format', 'input_audio_transcription', 'client_secret', 'include'] output_modalities=['audio', 'text']
+2026-02-20 18:14:27  2026-02-20 18:14:27,700 INFO vozlia_ng OPENAI_SESSION_UPDATED keys=['object', 'id', 'model', 'modalities', 'instructions', 'voice', 'output_audio_format', 'tools', 'tool_choice', 'temperature', 'max_response_output_tokens', 'turn_detection', 'speed', 'tracing', 'truncation', 'prompt', 'expires_at', 'input_audio_noise_reduction', 'input_audio_format', 'input_audio_transcription', 'client_secret', 'include'] output_modalities=['audio', 'text']
+2026-02-20 18:14:35  2026-02-20 18:14:35,924 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:14:35  2026-02-20 18:14:35,924 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=1
+2026-02-20 18:14:39  2026-02-20 18:14:39,011 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=heartbeat_fallback dt_ms=3086
+2026-02-20 18:14:39  2026-02-20 18:14:39,464 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=53 turn=1
+2026-02-20 18:14:39  2026-02-20 18:14:39,476 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:14:39  2026-02-20 18:14:39,476 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=1 modalities=['audio', 'text']
+2026-02-20 18:14:39  2026-02-20 18:14:39,541 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBPJPfkYlBbnZgy4nP9bv
+2026-02-20 18:14:40  2026-02-20 18:14:40,745 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBPJPfkYlBbnZgy4nP9bv bytes=800
+2026-02-20 18:14:40  2026-02-20 18:14:40,999 INFO vozlia_ng OPENAI_INPUT_COMMIT_SKIPPED reason=speech_stopped captured_frames=0 min_frames=5
+2026-02-20 18:14:41  2026-02-20 18:14:41,557 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:14:43  2026-02-20 18:14:43,266 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:14:43  2026-02-20 18:14:43,266 INFO vozlia_ng TWILIO_CLEAR_SENT
+2026-02-20 18:14:43  2026-02-20 18:14:43,266 INFO vozlia_ng BARGE-IN: user speech started while AI speaking; canceling active response and clearing audio buffer.
+2026-02-20 18:14:43  2026-02-20 18:14:43,267 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=2
+2026-02-20 18:14:43  2026-02-20 18:14:43,285 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPJPfkYlBbnZgy4nP9bv output_modalities=None
+2026-02-20 18:14:43  2026-02-20 18:14:43,285 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPJPfkYlBbnZgy4nP9bv dt_ms=3744
+2026-02-20 18:14:43  2026-02-20 18:14:43,285 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBPJPfkYlBbnZgy4nP9bv score=ok frames=725 chunks=59 bytes=116000 same_ratio=0.00 same_run_max=1 low_div_ratio=0.02 silence_ratio=0.00
+2026-02-20 18:14:43  2026-02-20 18:14:43,294 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:14:43  2026-02-20 18:14:43,294 INFO vozlia_ng Response resp_DBPJPfkYlBbnZgy4nP9bv finished with event 'response.done'; clearing active_response_id
+2026-02-20 18:14:44  2026-02-20 18:14:44,130 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 18:14:44  2026-02-20 18:14:44,375 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=8 turn=2
+2026-02-20 18:14:44  2026-02-20 18:14:44,384 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:14:44  2026-02-20 18:14:44,384 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=2 modalities=['audio', 'text']
+2026-02-20 18:14:44  2026-02-20 18:14:44,454 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBPJUWgU6OOIroEZ8rS3T
+2026-02-20 18:14:44  2026-02-20 18:14:44,746 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:14:44  2026-02-20 18:14:44,746 INFO vozlia_ng BARGE-IN_IGNORED_EARLY response_id=resp_DBPJUWgU6OOIroEZ8rS3T min_ms=700 min_frames=25
+2026-02-20 18:14:44  2026-02-20 18:14:44,746 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=3
+2026-02-20 18:14:44  2026-02-20 18:14:44,751 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPJUWgU6OOIroEZ8rS3T output_modalities=None
+2026-02-20 18:14:44  2026-02-20 18:14:44,751 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPJUWgU6OOIroEZ8rS3T dt_ms=297
+2026-02-20 18:14:44  2026-02-20 18:14:44,752 INFO vozlia_ng OPENAI_RESPONSE_DONE_NO_AUDIO id=resp_DBPJUWgU6OOIroEZ8rS3T output_modalities=None
+2026-02-20 18:14:44  2026-02-20 18:14:44,759 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:14:44  2026-02-20 18:14:44,759 INFO vozlia_ng Response resp_DBPJUWgU6OOIroEZ8rS3T finished with event 'response.done'; clearing active_response_id
+2026-02-20 18:14:46  2026-02-20 18:14:46,089 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 18:14:46  2026-02-20 18:14:46,527 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=15 turn=3
+2026-02-20 18:14:46  2026-02-20 18:14:46,534 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:14:46  2026-02-20 18:14:46,534 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=3 modalities=['audio', 'text']
+2026-02-20 18:14:46  2026-02-20 18:14:46,597 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBPJWaqFJDA1l7FmyAl3h
+2026-02-20 18:14:46  2026-02-20 18:14:46,982 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBPJWaqFJDA1l7FmyAl3h bytes=800
+2026-02-20 18:14:53  2026-02-20 18:14:53,007 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPJWaqFJDA1l7FmyAl3h output_modalities=None
+2026-02-20 18:14:53  2026-02-20 18:14:53,008 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPJWaqFJDA1l7FmyAl3h dt_ms=6410
+2026-02-20 18:14:53  2026-02-20 18:14:53,008 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBPJWaqFJDA1l7FmyAl3h score=ok frames=1245 chunks=99 bytes=199200 same_ratio=0.00 same_run_max=1 low_div_ratio=0.02 silence_ratio=0.00
+2026-02-20 18:14:53  2026-02-20 18:14:53,017 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:14:53  2026-02-20 18:14:53,017 INFO vozlia_ng Response resp_DBPJWaqFJDA1l7FmyAl3h finished with event 'response.done'; clearing active_response_id
+2026-02-20 18:15:01  2026-02-20 18:15:01,326 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:15:01  2026-02-20 18:15:01,326 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=4
+2026-02-20 18:15:02  2026-02-20 18:15:02,252 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 18:15:02  2026-02-20 18:15:02,444 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=1 turn=4
+2026-02-20 18:15:02  2026-02-20 18:15:02,452 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:02  2026-02-20 18:15:02,452 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=4 modalities=['audio', 'text']
+2026-02-20 18:15:02  2026-02-20 18:15:02,513 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBPJmKG56vJGCmoz3Hy5h
+2026-02-20 18:15:02  2026-02-20 18:15:02,989 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBPJmKG56vJGCmoz3Hy5h bytes=800
+2026-02-20 18:15:05  2026-02-20 18:15:05,788 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:15:05  2026-02-20 18:15:05,788 INFO vozlia_ng TWILIO_CLEAR_SENT
+2026-02-20 18:15:05  2026-02-20 18:15:05,788 INFO vozlia_ng BARGE-IN: user speech started while AI speaking; canceling active response and clearing audio buffer.
+2026-02-20 18:15:05  2026-02-20 18:15:05,788 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=5
+2026-02-20 18:15:05  2026-02-20 18:15:05,807 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPJmKG56vJGCmoz3Hy5h output_modalities=None
+2026-02-20 18:15:05  2026-02-20 18:15:05,807 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPJmKG56vJGCmoz3Hy5h dt_ms=3293
+2026-02-20 18:15:05  2026-02-20 18:15:05,807 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBPJmKG56vJGCmoz3Hy5h score=ok frames=625 chunks=51 bytes=100000 same_ratio=0.00 same_run_max=1 low_div_ratio=0.01 silence_ratio=0.00
+2026-02-20 18:15:05  2026-02-20 18:15:05,814 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:05  2026-02-20 18:15:05,815 INFO vozlia_ng Response resp_DBPJmKG56vJGCmoz3Hy5h finished with event 'response.done'; clearing active_response_id
+2026-02-20 18:15:07  2026-02-20 18:15:07,019 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=heartbeat_fallback dt_ms=1230
+2026-02-20 18:15:07  2026-02-20 18:15:07,187 INFO vozlia_ng OPENAI_INPUT_COMMIT_SKIPPED reason=speech_stopped already_committed=1
+2026-02-20 18:15:07  2026-02-20 18:15:07,365 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:15:07  2026-02-20 18:15:07,365 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=6
+2026-02-20 18:15:07  2026-02-20 18:15:07,608 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=22 turn=6
+2026-02-20 18:15:07  2026-02-20 18:15:07,615 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:07  2026-02-20 18:15:07,615 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=6 modalities=['audio', 'text']
+2026-02-20 18:15:07  2026-02-20 18:15:07,674 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBPJrw0VNUYR9FMY2zzl6
+2026-02-20 18:15:08  2026-02-20 18:15:08,048 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBPJrw0VNUYR9FMY2zzl6 bytes=800
+2026-02-20 18:15:08  2026-02-20 18:15:08,543 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPJrw0VNUYR9FMY2zzl6 output_modalities=None
+2026-02-20 18:15:08  2026-02-20 18:15:08,543 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPJrw0VNUYR9FMY2zzl6 dt_ms=869
+2026-02-20 18:15:08  2026-02-20 18:15:08,543 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBPJrw0VNUYR9FMY2zzl6 score=ok frames=125 chunks=10 bytes=20000 same_ratio=0.00 same_run_max=1 low_div_ratio=0.06 silence_ratio=0.00
+2026-02-20 18:15:08  2026-02-20 18:15:08,552 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:08  2026-02-20 18:15:08,552 INFO vozlia_ng Response resp_DBPJrw0VNUYR9FMY2zzl6 finished with event 'response.done'; clearing active_response_id
+2026-02-20 18:15:10  2026-02-20 18:15:10,810 INFO vozlia_ng OPENAI_INPUT_COMMIT_SKIPPED reason=speech_stopped captured_frames=0 min_frames=5
+2026-02-20 18:15:11  2026-02-20 18:15:11,067 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:11  2026-02-20 18:15:11,124 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBPJvfew9PKJdZnPEC7qp
+2026-02-20 18:15:11  2026-02-20 18:15:11,183 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:15:11  2026-02-20 18:15:11,183 INFO vozlia_ng BARGE-IN_IGNORED_EARLY response_id=resp_DBPJvfew9PKJdZnPEC7qp min_ms=700 min_frames=25
+2026-02-20 18:15:11  2026-02-20 18:15:11,183 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=7
+2026-02-20 18:15:11  2026-02-20 18:15:11,187 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPJvfew9PKJdZnPEC7qp output_modalities=None
+2026-02-20 18:15:11  2026-02-20 18:15:11,187 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPJvfew9PKJdZnPEC7qp dt_ms=63
+2026-02-20 18:15:11  2026-02-20 18:15:11,187 INFO vozlia_ng OPENAI_RESPONSE_DONE_NO_AUDIO id=resp_DBPJvfew9PKJdZnPEC7qp output_modalities=None
+2026-02-20 18:15:11  2026-02-20 18:15:11,195 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:11  2026-02-20 18:15:11,195 INFO vozlia_ng Response resp_DBPJvfew9PKJdZnPEC7qp finished with event 'response.done'; clearing active_response_id
+2026-02-20 18:15:13  2026-02-20 18:15:13,020 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=heartbeat_fallback dt_ms=1837
+2026-02-20 18:15:13  2026-02-20 18:15:13,338 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=55 turn=7
+2026-02-20 18:15:13  2026-02-20 18:15:13,348 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:13  2026-02-20 18:15:13,349 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=7 modalities=['audio', 'text']
+2026-02-20 18:15:13  2026-02-20 18:15:13,406 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBPJx194jJ9oNzYOJOm8h
+2026-02-20 18:15:13  2026-02-20 18:15:13,874 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBPJx194jJ9oNzYOJOm8h bytes=800
+2026-02-20 18:15:15  2026-02-20 18:15:15,758 INFO vozlia_ng OPENAI_INPUT_COMMIT_SKIPPED reason=speech_stopped captured_frames=0 min_frames=5
+2026-02-20 18:15:16  2026-02-20 18:15:16,093 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:18  2026-02-20 18:15:18,054 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPJx194jJ9oNzYOJOm8h output_modalities=None
+2026-02-20 18:15:18  2026-02-20 18:15:18,054 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPJx194jJ9oNzYOJOm8h dt_ms=4647
+2026-02-20 18:15:18  2026-02-20 18:15:18,054 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBPJx194jJ9oNzYOJOm8h score=ok frames=1035 chunks=82 bytes=165600 same_ratio=0.00 same_run_max=1 low_div_ratio=0.00 silence_ratio=0.00
+2026-02-20 18:15:18  2026-02-20 18:15:18,061 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:18  2026-02-20 18:15:18,061 INFO vozlia_ng Response resp_DBPJx194jJ9oNzYOJOm8h finished with event 'response.done'; clearing active_response_id
+2026-02-20 18:15:19  2026-02-20 18:15:19,915 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:15:19  2026-02-20 18:15:19,915 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=8
+2026-02-20 18:15:20  2026-02-20 18:15:20,831 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 18:15:21  2026-02-20 18:15:21,068 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=4 turn=8
+2026-02-20 18:15:21  2026-02-20 18:15:21,077 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:21  2026-02-20 18:15:21,077 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=8 modalities=['audio', 'text']
+2026-02-20 18:15:21  2026-02-20 18:15:21,799 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBPK5mH7ax8H8eMgOO9SU
+2026-02-20 18:15:22  2026-02-20 18:15:22,918 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBPK5mH7ax8H8eMgOO9SU bytes=800
+2026-02-20 18:15:28  2026-02-20 18:15:28,313 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPK5mH7ax8H8eMgOO9SU output_modalities=None
+2026-02-20 18:15:28  2026-02-20 18:15:28,313 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPK5mH7ax8H8eMgOO9SU dt_ms=6514
+2026-02-20 18:15:28  2026-02-20 18:15:28,313 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBPK5mH7ax8H8eMgOO9SU score=ok frames=1310 chunks=104 bytes=209600 same_ratio=0.00 same_run_max=1 low_div_ratio=0.02 silence_ratio=0.00
+2026-02-20 18:15:28  2026-02-20 18:15:28,323 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:28  2026-02-20 18:15:28,323 INFO vozlia_ng Response resp_DBPK5mH7ax8H8eMgOO9SU finished with event 'response.done'; clearing active_response_id
+2026-02-20 18:15:35  2026-02-20 18:15:35,506 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:15:35  2026-02-20 18:15:35,506 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=9
+2026-02-20 18:15:36  2026-02-20 18:15:36,671 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 18:15:36  2026-02-20 18:15:36,914 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=3 turn=9
+2026-02-20 18:15:36  2026-02-20 18:15:36,930 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:36  2026-02-20 18:15:36,931 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=9 modalities=['audio', 'text']
+2026-02-20 18:15:36  2026-02-20 18:15:36,995 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBPKK9tmIPkzbkFx3ITDg
+2026-02-20 18:15:37  2026-02-20 18:15:37,408 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBPKK9tmIPkzbkFx3ITDg bytes=800
+2026-02-20 18:15:38  2026-02-20 18:15:38,951 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:15:38  2026-02-20 18:15:38,951 INFO vozlia_ng TWILIO_CLEAR_SENT
+2026-02-20 18:15:38  2026-02-20 18:15:38,951 INFO vozlia_ng BARGE-IN: user speech started while AI speaking; canceling active response and clearing audio buffer.
+2026-02-20 18:15:38  2026-02-20 18:15:38,951 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=10
+2026-02-20 18:15:38  2026-02-20 18:15:38,971 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPKK9tmIPkzbkFx3ITDg output_modalities=None
+2026-02-20 18:15:38  2026-02-20 18:15:38,971 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPKK9tmIPkzbkFx3ITDg dt_ms=1976
+2026-02-20 18:15:38  2026-02-20 18:15:38,971 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBPKK9tmIPkzbkFx3ITDg score=ok frames=275 chunks=23 bytes=44000 same_ratio=0.00 same_run_max=1 low_div_ratio=0.03 silence_ratio=0.00
+2026-02-20 18:15:38  2026-02-20 18:15:38,985 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:38  2026-02-20 18:15:38,985 INFO vozlia_ng Response resp_DBPKK9tmIPkzbkFx3ITDg finished with event 'response.done'; clearing active_response_id
+2026-02-20 18:15:40  2026-02-20 18:15:40,350 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 18:15:40  2026-02-20 18:15:40,515 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=1 turn=10
+2026-02-20 18:15:40  2026-02-20 18:15:40,525 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:40  2026-02-20 18:15:40,525 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=10 modalities=['audio', 'text']
+2026-02-20 18:15:40  2026-02-20 18:15:40,526 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:15:40  2026-02-20 18:15:40,526 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=11
+2026-02-20 18:15:40  2026-02-20 18:15:40,587 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBPKO0BC6ibB5uEPZ8kzX
+2026-02-20 18:15:41  2026-02-20 18:15:41,124 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBPKO0BC6ibB5uEPZ8kzX bytes=800
+2026-02-20 18:15:42  2026-02-20 18:15:42,072 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 18:15:42  2026-02-20 18:15:42,296 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=17 turn=11
+2026-02-20 18:15:42  2026-02-20 18:15:42,312 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:43  2026-02-20 18:15:43,027 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPKO0BC6ibB5uEPZ8kzX output_modalities=None
+2026-02-20 18:15:43  2026-02-20 18:15:43,027 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPKO0BC6ibB5uEPZ8kzX dt_ms=2440
+2026-02-20 18:15:43  2026-02-20 18:15:43,027 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBPKO0BC6ibB5uEPZ8kzX score=ok frames=440 chunks=35 bytes=70400 same_ratio=0.00 same_run_max=1 low_div_ratio=0.03 silence_ratio=0.00
+2026-02-20 18:15:43  2026-02-20 18:15:43,043 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:43  2026-02-20 18:15:43,043 INFO vozlia_ng Response resp_DBPKO0BC6ibB5uEPZ8kzX finished with event 'response.done'; clearing active_response_id
+2026-02-20 18:15:49  2026-02-20 18:15:49,589 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:15:49  2026-02-20 18:15:49,590 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=12
+2026-02-20 18:15:50  2026-02-20 18:15:50,572 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 18:15:51  2026-02-20 18:15:51,619 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=5 turn=12
+2026-02-20 18:15:51  2026-02-20 18:15:51,633 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:51  2026-02-20 18:15:51,634 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=12 modalities=['audio', 'text']
+2026-02-20 18:15:51  2026-02-20 18:15:51,692 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBPKZJWjeCYSnyKs5risZ
+2026-02-20 18:15:52  2026-02-20 18:15:52,459 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBPKZJWjeCYSnyKs5risZ bytes=800
+2026-02-20 18:15:56  2026-02-20 18:15:56,646 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPKZJWjeCYSnyKs5risZ output_modalities=None
+2026-02-20 18:15:56  2026-02-20 18:15:56,647 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPKZJWjeCYSnyKs5risZ dt_ms=4954
+2026-02-20 18:15:56  2026-02-20 18:15:56,647 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBPKZJWjeCYSnyKs5risZ score=ok frames=1035 chunks=82 bytes=165600 same_ratio=0.00 same_run_max=1 low_div_ratio=0.02 silence_ratio=0.00
+2026-02-20 18:15:56  2026-02-20 18:15:56,667 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:15:56  2026-02-20 18:15:56,667 INFO vozlia_ng Response resp_DBPKZJWjeCYSnyKs5risZ finished with event 'response.done'; clearing active_response_id
+2026-02-20 18:16:17  2026-02-20 18:16:17,032 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=heartbeat_fallback dt_ms=2986
+2026-02-20 18:16:17  2026-02-20 18:16:17,323 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=65 turn=13
+2026-02-20 18:16:17  2026-02-20 18:16:17,332 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:16:17  2026-02-20 18:16:17,332 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=13 modalities=['audio', 'text']
+2026-02-20 18:16:17  2026-02-20 18:16:17,418 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBPKzi0Rln8gV2b1mTipA
+2026-02-20 18:16:18  2026-02-20 18:16:18,059 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBPKzi0Rln8gV2b1mTipA bytes=800
+2026-02-20 18:16:20  2026-02-20 18:16:20,927 INFO vozlia_ng OPENAI_INPUT_COMMIT_SKIPPED reason=speech_stopped captured_frames=0 min_frames=5
+2026-02-20 18:16:21  2026-02-20 18:16:21,296 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:16:25  2026-02-20 18:16:25,988 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPKzi0Rln8gV2b1mTipA output_modalities=None
+2026-02-20 18:16:25  2026-02-20 18:16:25,988 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPKzi0Rln8gV2b1mTipA dt_ms=8569
+2026-02-20 18:16:25  2026-02-20 18:16:25,988 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBPKzi0Rln8gV2b1mTipA score=ok frames=1802 chunks=144 bytes=288320 same_ratio=0.00 same_run_max=1 low_div_ratio=0.02 silence_ratio=0.00
+2026-02-20 18:16:25  2026-02-20 18:16:25,996 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:16:25  2026-02-20 18:16:25,996 INFO vozlia_ng Response resp_DBPKzi0Rln8gV2b1mTipA finished with event 'response.done'; clearing active_response_id
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T18:16:41Z end=2026-02-20T18:16:44Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")
+2026-02-20 18:16:42  2026-02-20 18:16:42,844 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:16:42  2026-02-20 18:16:42,844 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=14
+2026-02-20 18:16:44  2026-02-20 18:16:44,629 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 18:16:44  2026-02-20 18:16:44,883 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=33 turn=14
+2026-02-20 18:16:44  2026-02-20 18:16:44,896 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:16:44  2026-02-20 18:16:44,896 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=14 modalities=['audio', 'text']
+2026-02-20 18:16:44  2026-02-20 18:16:44,896 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:16:44  2026-02-20 18:16:44,896 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=15
+2026-02-20 18:16:44  2026-02-20 18:16:44,952 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBPLQN20cQIPdOcA4LMxH
+2026-02-20 18:16:45  2026-02-20 18:16:45,441 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBPLQN20cQIPdOcA4LMxH bytes=800
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T18:16:46Z end=2026-02-20T18:16:49Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")
+2026-02-20 18:16:46  2026-02-20 18:16:46,351 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 18:16:46  2026-02-20 18:16:46,750 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=22 turn=15
+2026-02-20 18:16:46  2026-02-20 18:16:46,763 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:16:46  2026-02-20 18:16:46,887 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 18:16:46  2026-02-20 18:16:46,887 INFO vozlia_ng TWILIO_CLEAR_SENT
+2026-02-20 18:16:46  2026-02-20 18:16:46,887 INFO vozlia_ng BARGE-IN: user speech started while AI speaking; canceling active response and clearing audio buffer.
+2026-02-20 18:16:46  2026-02-20 18:16:46,887 INFO vozlia_ng AUDIO_BUFFER_FLUSH_ON_SPEECH_STARTED dropped_bytes=80 active_response_id=resp_DBPLQN20cQIPdOcA4LMxH
+2026-02-20 18:16:46  2026-02-20 18:16:46,887 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=16
+2026-02-20 18:16:46  2026-02-20 18:16:46,911 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPLQN20cQIPdOcA4LMxH output_modalities=None
+2026-02-20 18:16:46  2026-02-20 18:16:46,911 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPLQN20cQIPdOcA4LMxH dt_ms=1959
+2026-02-20 18:16:46  2026-02-20 18:16:46,912 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBPLQN20cQIPdOcA4LMxH score=ok frames=312 chunks=26 bytes=49920 same_ratio=0.00 same_run_max=1 low_div_ratio=0.03 silence_ratio=0.00
+2026-02-20 18:16:46  2026-02-20 18:16:46,919 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:16:46  2026-02-20 18:16:46,919 INFO vozlia_ng Response resp_DBPLQN20cQIPdOcA4LMxH finished with event 'response.done'; clearing active_response_id
+2026-02-20 18:16:49  2026-02-20 18:16:49,034 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=heartbeat_fallback dt_ms=2147
+2026-02-20 18:16:49  2026-02-20 18:16:49,304 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=42 turn=16
+2026-02-20 18:16:49  2026-02-20 18:16:49,312 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:16:49  2026-02-20 18:16:49,312 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=16 modalities=['audio', 'text']
+2026-02-20 18:16:49  2026-02-20 18:16:49,372 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBPLV4SduRgG4Jszd40AU
+2026-02-20 18:16:50  2026-02-20 18:16:50,041 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBPLV4SduRgG4Jszd40AU bytes=800
+2026-02-20 18:16:53  2026-02-20 18:16:53,071 INFO vozlia_ng OPENAI_INPUT_COMMIT_SKIPPED reason=speech_stopped captured_frames=0 min_frames=5
+2026-02-20 18:16:53  2026-02-20 18:16:53,395 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:16:56  2026-02-20 18:16:56,034 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPLV4SduRgG4Jszd40AU output_modalities=None
+2026-02-20 18:16:56  2026-02-20 18:16:56,035 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPLV4SduRgG4Jszd40AU dt_ms=6662
+2026-02-20 18:16:56  2026-02-20 18:16:56,035 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBPLV4SduRgG4Jszd40AU score=ok frames=1347 chunks=107 bytes=215520 same_ratio=0.00 same_run_max=1 low_div_ratio=0.02 silence_ratio=0.00
+2026-02-20 18:16:56  2026-02-20 18:16:56,045 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:16:56  2026-02-20 18:16:56,045 INFO vozlia_ng Response resp_DBPLV4SduRgG4Jszd40AU finished with event 'response.done'; clearing active_response_id
+2026-02-20 18:17:28  2026-02-20 18:17:28,350 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBPM2syMkVVs0GvdAqLwJ output_modalities=None
+2026-02-20 18:17:28  2026-02-20 18:17:28,350 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBPM2syMkVVs0GvdAqLwJ dt_ms=6009
+2026-02-20 18:17:28  2026-02-20 18:17:28,350 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBPM2syMkVVs0GvdAqLwJ score=ok frames=1287 chunks=103 bytes=205920 same_ratio=0.00 same_run_max=1 low_div_ratio=0.02 silence_ratio=0.00
+2026-02-20 18:17:28  2026-02-20 18:17:28,379 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAc831a7d96e916c63500593e0976af84a
+2026-02-20 18:17:28  2026-02-20 18:17:28,379 INFO vozlia_ng Response resp_DBPM2syMkVVs0GvdAqLwJ finished with event 'response.done'; clearing active_response_id
+2026-02-20 18:17:46  clientIP="54.221.99.230" requestID="" responseTimeMS=199785 responseBytes=0 userAgent="Twilio.TmeWs/1.0"
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T18:55:20Z end=2026-02-20T18:55:22Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T19:12:05Z end=2026-02-20T19:12:08Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T19:12:05Z end=2026-02-20T19:12:10Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T19:20:01Z end=2026-02-20T19:20:04Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T19:28:20Z end=2026-02-20T19:28:23Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T19:28:20Z end=2026-02-20T19:28:25Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")
+2026-02-20 19:42:51  [34m[1m==>(B[m [1mDownloaded 92MB in 5s. Extraction took 2s.(B[m
+2026-02-20 19:42:56  [34m[1m==>(B[m [1mInstalling Python version 3.12.8...(B[m
+2026-02-20 19:43:16  Successfully installed pip-26.0.1
+2026-02-20 19:43:16  Processing ./.
+2026-02-20 19:43:16    Installing build dependencies: started
+2026-02-20 19:43:18    Getting requirements to build wheel: finished with status 'done'
+2026-02-20 19:43:18    Preparing metadata (pyproject.toml): started
+2026-02-20 19:43:18    Preparing metadata (pyproject.toml): finished with status 'done'
+2026-02-20 19:43:18  Collecting fastapi (from vozlia-ng==0.0.0)
+2026-02-20 19:43:18    Using cached fastapi-0.129.0-py3-none-any.whl.metadata (30 kB)
+2026-02-20 19:43:18  Collecting uvicorn[standard] (from vozlia-ng==0.0.0)
+2026-02-20 19:43:18    Using cached uvicorn-0.41.0-py3-none-any.whl.metadata (6.7 kB)
+2026-02-20 19:43:19  Collecting pydantic (from vozlia-ng==0.0.0)
+2026-02-20 19:43:19    Using cached pydantic-2.12.5-py3-none-any.whl.metadata (90 kB)
+2026-02-20 19:43:19  Collecting starlette<1.0.0,>=0.40.0 (from fastapi->vozlia-ng==0.0.0)
+2026-02-20 19:43:19    Using cached starlette-0.52.1-py3-none-any.whl.metadata (6.3 kB)
+2026-02-20 19:43:19  Collecting typing-extensions>=4.8.0 (from fastapi->vozlia-ng==0.0.0)
+2026-02-20 19:43:19    Using cached typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+2026-02-20 19:43:19  Collecting typing-inspection>=0.4.2 (from fastapi->vozlia-ng==0.0.0)
+2026-02-20 19:43:19    Using cached typing_inspection-0.4.2-py3-none-any.whl.metadata (2.6 kB)
+2026-02-20 19:43:19  Collecting annotated-doc>=0.0.2 (from fastapi->vozlia-ng==0.0.0)
+2026-02-20 19:43:19    Using cached annotated_doc-0.0.4-py3-none-any.whl.metadata (6.6 kB)
+2026-02-20 19:43:19  Collecting anyio<5,>=3.6.2 (from starlette<1.0.0,>=0.40.0->fastapi->vozlia-ng==0.0.0)
+2026-02-20 19:43:19    Using cached anyio-4.12.1-py3-none-any.whl.metadata (4.3 kB)
+2026-02-20 19:43:19  Collecting idna>=2.8 (from anyio<5,>=3.6.2->starlette<1.0.0,>=0.40.0->fastapi->vozlia-ng==0.0.0)
+2026-02-20 19:43:19    Using cached idna-3.11-py3-none-any.whl.metadata (8.4 kB)
+2026-02-20 19:43:19  Collecting annotated-types>=0.6.0 (from pydantic->vozlia-ng==0.0.0)
+2026-02-20 19:43:19    Using cached annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
+2026-02-20 19:43:20  Collecting pydantic-core==2.41.5 (from pydantic->vozlia-ng==0.0.0)
+2026-02-20 19:43:20    Using cached pydantic_core-2.41.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (7.3 kB)
+2026-02-20 19:43:20  Collecting click>=7.0 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-20 19:43:20    Using cached click-8.3.1-py3-none-any.whl.metadata (2.6 kB)
+2026-02-20 19:43:20  Collecting h11>=0.8 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-20 19:43:20    Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2026-02-20 19:43:20  Collecting httptools>=0.6.3 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-20 19:43:20    Using cached httptools-0.7.1-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (3.5 kB)
+2026-02-20 19:43:20  Collecting python-dotenv>=0.13 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-20 19:43:20    Using cached python_dotenv-1.2.1-py3-none-any.whl.metadata (25 kB)
+2026-02-20 19:43:20  Collecting pyyaml>=5.1 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-20 19:43:20    Using cached pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+2026-02-20 19:43:20  Collecting uvloop>=0.15.1 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-20 19:43:20    Using cached uvloop-0.22.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (4.9 kB)
+2026-02-20 19:43:20  Collecting watchfiles>=0.20 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-20 19:43:20    Using cached watchfiles-1.1.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
+2026-02-20 19:43:20  Collecting websockets>=10.4 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-20 19:43:20    Using cached websockets-16.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (6.8 kB)
+2026-02-20 19:43:20  Using cached fastapi-0.129.0-py3-none-any.whl (102 kB)
+2026-02-20 19:43:20  Using cached starlette-0.52.1-py3-none-any.whl (74 kB)
+2026-02-20 19:43:20  Using cached anyio-4.12.1-py3-none-any.whl (113 kB)
+2026-02-20 19:43:20  Using cached annotated_doc-0.0.4-py3-none-any.whl (5.3 kB)
+2026-02-20 19:43:20  Using cached idna-3.11-py3-none-any.whl (71 kB)
+2026-02-20 19:43:20  Using cached pydantic-2.12.5-py3-none-any.whl (463 kB)
+2026-02-20 19:43:20  Using cached pydantic_core-2.41.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+2026-02-20 19:43:20  Using cached annotated_types-0.7.0-py3-none-any.whl (13 kB)
+2026-02-20 19:43:20  Using cached typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+2026-02-20 19:43:20  Using cached typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+2026-02-20 19:43:20  Using cached uvicorn-0.41.0-py3-none-any.whl (68 kB)
+2026-02-20 19:43:20  Using cached click-8.3.1-py3-none-any.whl (108 kB)
+2026-02-20 19:43:20  Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+2026-02-20 19:43:20  Using cached httptools-0.7.1-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (517 kB)
+2026-02-20 19:43:20  Using cached python_dotenv-1.2.1-py3-none-any.whl (21 kB)
+2026-02-20 19:43:20  Using cached pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (807 kB)
+2026-02-20 19:43:20  Using cached uvloop-0.22.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (4.4 MB)
+2026-02-20 19:43:20  Using cached watchfiles-1.1.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (456 kB)
+2026-02-20 19:43:20  Using cached websockets-16.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (184 kB)
+2026-02-20 19:43:20  Building wheels for collected packages: vozlia-ng
+2026-02-20 19:43:20    Building wheel for vozlia-ng (pyproject.toml): started
+2026-02-20 19:43:21    Building wheel for vozlia-ng (pyproject.toml): finished with status 'done'
+2026-02-20 19:43:21    Created wheel for vozlia-ng: filename=vozlia_ng-0.0.0-py3-none-any.whl size=52931 sha256=f7718640f9089214d42b1e6841d76f8c226df2027fdfebdd625489a71b807f1e
+2026-02-20 19:43:21    Stored in directory: /tmp/pip-ephem-wheel-cache-2xnpp0_q/wheels/5a/f8/e0/58e42082500d50320d06a4baa628d7286902f98f440588a8e8
+2026-02-20 19:43:21  Successfully built vozlia-ng
+2026-02-20 19:43:21  Installing collected packages: websockets, uvloop, typing-extensions, pyyaml, python-dotenv, idna, httptools, h11, click, annotated-types, annotated-doc, uvicorn, typing-inspection, pydantic-core, anyio, watchfiles, starlette, pydantic, fastapi, vozlia-ng
+2026-02-20 19:43:22  
+2026-02-20 19:43:22  Successfully installed annotated-doc-0.0.4 annotated-types-0.7.0 anyio-4.12.1 click-8.3.1 fastapi-0.129.0 h11-0.16.0 httptools-0.7.1 idna-3.11 pydantic-2.12.5 pydantic-core-2.41.5 python-dotenv-1.2.1 pyyaml-6.0.3 starlette-0.52.1 typing-extensions-4.15.0 typing-inspection-0.4.2 uvicorn-0.41.0 uvloop-0.22.1 vozlia-ng-0.0.0 watchfiles-1.1.1 websockets-16.0
+2026-02-20 19:44:15  [34;1m==>[0;22m [1mUploaded in 11.2s. Compression took 33.0s[22m
+2026-02-20 19:44:15  [32;1m==>[0;22m [1mBuild successful 🎉[22m
+2026-02-20 19:44:24  [0;34m[1m==> [0m[1mDeploying...[0m
+2026-02-20 19:44:24  [0;34m[1m==> [0m[1mSetting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance[0m
+2026-02-20 19:44:52  2026-02-20 19:44:52,896 INFO vozlia_ng FEATURES_DISCOVERED keys=['access_gate', 'admin_quality', 'owner_analytics_query', 'owner_events_api', 'owner_inbox', 'owner_insights', 'postcall_extract', 'postcall_notify_sms', 'postcall_reconcile', 'sample', 'shared_line_access', 'voice_flow_a', 'whatsapp_in']
+2026-02-20 19:44:52  2026-02-20 19:44:52,896 INFO vozlia_ng FEATURES_ENABLED keys=['owner_events_api', 'postcall_extract', 'shared_line_access', 'voice_flow_a']
+2026-02-20 19:44:52  INFO:     Started server process [55]
+2026-02-20 19:44:52  INFO:     Waiting for application startup.
+2026-02-20 19:44:52  INFO:     Application startup complete.
+2026-02-20 19:44:52  INFO:     Uvicorn running on http://0.0.0.0:10000 (Press CTRL+C to quit)
+2026-02-20 19:44:53  INFO:     127.0.0.1:60778 - "HEAD / HTTP/1.1" 405 Method Not Allowed
+2026-02-20 19:44:56  [0;32m[1m==> [0m[1mYour service is live 🎉[0m
+2026-02-20 19:44:56  [0;32m[1m==> [0m[1m[0m
+2026-02-20 19:44:56  [0;32m[1m==> [0m[1m///////////////////////////////////////////////////////////[0m
+2026-02-20 19:44:56  [0;32m[1m==> [0m[1m[0m
+2026-02-20 19:44:56  [0;32m[1m==> [0m[1mAvailable at your primary URL https://vozlia-ng.onrender.com[0m
+2026-02-20 19:44:56  [0;32m[1m==> [0m[1m[0m
+2026-02-20 19:44:56  [0;32m[1m==> [0m[1m///////////////////////////////////////////////////////////[0m
+2026-02-20 19:44:56  clientIP="34.83.77.94" requestID="f8966098-ab09-4f40" responseTimeMS=65 responseBytes=208 userAgent="Go-http-client/2.0"
+2026-02-20 19:50:00  [0;32m[1m==> [0m[1mDetected service running on port 10000[0m
+2026-02-20 19:50:00  [0;32m[1m==> [0m[1mDocs on specifying a port: https://render.com/docs/web-services#port-binding[0m
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T19:52:53Z end=2026-02-20T19:52:55Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T19:52:58Z end=2026-02-20T19:53:00Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")

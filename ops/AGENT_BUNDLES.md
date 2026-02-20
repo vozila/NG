@@ -2,7 +2,7 @@
 
 **Updated:** 2026-02-20 (America/New_York)
 
-## Bundle B001 (Active)
+## Bundle B001 (Executed 2026-02-20)
 
 Command:
 - `bash scripts/agent_bundle_workflow.sh execute B001`
@@ -12,6 +12,7 @@ Command:
 
 ### Agent A — Runtime Voice
 - Task: `TASK-0401`
+- Status: DONE
 - Owns only:
   - `features/voice_flow_a.py`
   - `tests/test_voice_flow_a.py`
@@ -25,6 +26,7 @@ Command:
 
 ### Agent B — Tooling + Diagnostics
 - Task: `TASK-0402`
+- Status: DONE
 - Owns only:
   - `scripts/capture_render_logs.sh`
   - `scripts/analyze_bargein_latency.py`
@@ -41,6 +43,7 @@ Command:
 
 ### Agent C — Ops Scribe + Coordination
 - Task: `TASK-0403`
+- Status: DONE
 - Owns only:
   - `AGENTS.md`
   - `ops/TASKBOARD.md`

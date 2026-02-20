@@ -248,3 +248,24 @@ What changed:
 
 Outcome:
 - WebUI work is now specified as a separate repo flow with bundle gates and integration checks against NG backend.
+
+## 2026-02-20 — Bundle B001 completion sync (Agent C)
+
+What changed:
+- Completed ops memory-spine/status synchronization for Bundle `B001`.
+- Aligned assignment status across:
+  - `AGENTS.md`
+  - `ops/TASKBOARD.md`
+  - `ops/CHECKPOINT.md`
+  - `ops/AGENT_BUNDLES.md`
+  - `.agents/tasks/TASK-0401.md`, `.agents/tasks/TASK-0402.md`, `.agents/tasks/TASK-0403.md`
+- Normalized active bundle task statuses to DONE and retained non-overlapping ownership boundaries.
+
+Render-log evidence reviewed:
+- `ops/logs/vozlia-ng-20260220T174654Z-2.log`
+- `ops/logs/vozlia-ng-20260220T175205Z-3.log`
+- `ops/logs/vozlia-ng-20260220T181422Z-4.log`
+
+Proof (<=5):
+- `rg '^- Agent [ABC]:' AGENTS.md && rg '^Status:' .agents/tasks/TASK-0401.md .agents/tasks/TASK-0402.md .agents/tasks/TASK-0403.md` ✅
+- `rg -o 'ops/logs/[A-Za-z0-9._/-]+' ops/JOURNAL.md | sort -u | while IFS= read -r f; do test -f "$f" && echo "OK $f"; done` ✅

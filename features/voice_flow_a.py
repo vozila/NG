@@ -695,7 +695,40 @@ async def _twilio_sender_loop(
                     chunk_parts.append(buffers.aux.popleft())
 
             if not chunk_parts:
-                await asyncio.sleep(0.005)
+                last_send_ts = None
+                last_send_rid = None
+                if _is_sender_underrun_state(response_state=response_state, buffers=buffers):
+                    underruns += 1
+                else:
+                    idle_ticks += 1
+                now = time.monotonic()
+                if now >= next_due:
+                    idle_late_ms_max = max(idle_late_ms_max, (now - next_due) * 1000.0)
+                    next_due = now + FRAME_SLEEP_S
+                if now - stats_started >= stats_every_s:
+                    if stats_log_enabled:
+                        prebuf = bool(response_state.get("active_response_id")) and len(buffers.main) < prebuffer_frames
+                        _dbg(
+                            f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
+                            f"frames_sent={frames_sent} underruns={underruns} idle_ticks={idle_ticks} "
+                            f"prebuf_waits={prebuf_waits} "
+                            f"late_ms_max={late_ms_max:.1f} prebuf={prebuf} "
+                            f"idle_late_ms_max={idle_late_ms_max:.1f} "
+                            f"send_gap_ms_max={send_gap_ms_max:.1f} "
+                            f"send_stall_warn_count={send_stall_warn_count} "
+                            f"send_stall_crit_count={send_stall_crit_count}"
+                        )
+                    stats_started = now
+                    frames_sent = 0
+                    underruns = 0
+                    idle_ticks = 0
+                    prebuf_waits = 0
+                    late_ms_max = 0.0
+                    idle_late_ms_max = 0.0
+                    send_stall_warn_count = 0
+                    send_stall_crit_count = 0
+                    send_gap_ms_max = 0.0
+                await asyncio.sleep(0.01)
                 continue
 
             chunk_bytes = b"".join(chunk_parts)

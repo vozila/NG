@@ -17,8 +17,12 @@
 - Owner inbox endpoints are available behind gates (`VOZ_FEATURE_OWNER_INBOX`, `VOZ_OWNER_INBOX_ENABLED`).
 - Postcall SMS notifier is available behind gates (`VOZ_FEATURE_POSTCALL_NOTIFY_SMS`, `VOZ_POSTCALL_NOTIFY_SMS_ENABLED`).
 - Flow A now includes debug-gated realtime diagnostics for queue/pacing health and speech controller visibility.
-- Active 3-agent bundle model is now defined in `ops/AGENT_BUNDLES.md` (Bundle B001).
-- New execution tasks created: `TASK-0401`, `TASK-0402`, `TASK-0403`.
+- Active 3-agent bundle model is defined in `ops/AGENT_BUNDLES.md` (Bundle B001).
+- Bundle B001 execution status is synchronized:
+  - `TASK-0401`: DONE
+  - `TASK-0402`: DONE
+  - `TASK-0403`: DONE
+- Required task evidence now includes checks run plus concrete render-log references in each active bundle task file.
 
 ## Last known good
 - Flow A OpenAI Realtime bridge: audio deltas received + Twilio μ-law frames sent + caller hears speech.
@@ -38,9 +42,7 @@
   - reconcile honors bounded concurrency (`VOZ_POSTCALL_RECONCILE_CONCURRENCY`) without unbounded fan-out
 
 ## Next actions
-- Land chunk-mode pacing parity fix and validate against real call logs (`TASK-0401`).
-- Harden log tooling workflow and keep runbook/docs aligned (`TASK-0402`).
-- Keep 3-agent assignment/status/memory-spine sync current each bundle cycle (`TASK-0403`).
+- Open next 3-agent bundle cycle and assign next three non-overlapping tasks.
 - Add/verify feature gating via `VOZ_FEATURE_<NAME>_AI_MODES`.
 - Build owner analytics views on top of durable `flow_a.*` and `postcall.*` facts.
 - Roll out caller metadata contract consumers across owner automations (inbox/notify workflows).

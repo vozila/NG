@@ -11,6 +11,7 @@ import glob
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from statistics import median
 from typing import Iterable
 
@@ -158,18 +159,34 @@ def build_parser() -> argparse.ArgumentParser:
         default=8,
         help="Only read the newest N files (default: 8)",
     )
+    parser.add_argument(
+        "--sort-by",
+        choices=("name", "mtime"),
+        default="name",
+        help="Order files by name or mtime before applying --last-files (default: name)",
+    )
     parser.add_argument("--rid", help="Filter by rid")
     parser.add_argument("--callsid", help="Filter by callSid")
     return parser
+
+
+def select_files(glob_pattern: str, sort_by: str, last_files: int) -> list[str]:
+    paths = [Path(p) for p in glob.glob(glob_pattern)]
+    if sort_by == "mtime":
+        paths.sort(key=lambda p: (p.stat().st_mtime, p.name))
+    else:
+        paths.sort(key=lambda p: p.name)
+    files = [str(p) for p in paths]
+    if last_files > 0:
+        files = files[-last_files:]
+    return files
 
 
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
-    files = sorted(glob.glob(args.glob_pattern))
-    if args.last_files > 0:
-        files = files[-args.last_files :]
+    files = select_files(args.glob_pattern, args.sort_by, args.last_files)
     if not files:
         print("No log files found.")
         return 1
@@ -185,7 +202,8 @@ def main() -> int:
     if args.callsid:
         events = [e for e in events if e.callsid == args.callsid]
 
-    print(f"files={len(files)} events={len(events)}")
+    print(f"files={len(files)} sort_by={args.sort_by} events={len(events)}")
+    print("FILES " + ",".join(Path(p).name for p in files))
     print("rid,callsid,mode,vad,clear_ms,done_ms")
     for evt in events:
         clear_s = "" if evt.clear_ms is None else str(evt.clear_ms)

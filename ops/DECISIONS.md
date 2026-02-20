@@ -103,3 +103,13 @@ Decision:
 Implications:
 - Every active task must exist in `.agents/tasks/` with scope/checks/log-evidence sections.
 - Agents must review `ops/logs/*` for expected event signatures whenever behavior-sensitive changes are made.
+
+## 2026-02-20 — Bundle completion status is synchronized through task files + AGENTS mirror
+
+Decision:
+- Treat `.agents/tasks/TASK-xxxx.md` status as canonical per-agent execution state.
+- Mirror bundle execution status in `AGENTS.md` so assignment view and task status never diverge.
+
+Implications:
+- When a bundle run completes, Agent C must update both task statuses and the AGENTS assignment mirror in the same sync pass.
+- Memory-spine updates are considered incomplete until both consistency and log-reference existence checks pass.

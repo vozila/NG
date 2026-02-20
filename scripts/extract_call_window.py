@@ -32,6 +32,18 @@ def parse_args() -> argparse.Namespace:
         "--out",
         help="Output path. Default: ops/logs/extract-<rid>-<utc>.log",
     )
+    parser.add_argument(
+        "--last-files",
+        type=int,
+        default=0,
+        help="Only read the newest N files after ordering (default: 0 = all)",
+    )
+    parser.add_argument(
+        "--sort-by",
+        choices=("name", "mtime"),
+        default="name",
+        help="Order files by name or mtime before applying --last-files (default: name)",
+    )
     return parser.parse_args()
 
 
@@ -40,11 +52,22 @@ def default_out_path(rid: str) -> Path:
     return Path("ops/logs") / f"extract-{rid}-{ts}.log"
 
 
+def select_files(glob_pattern: str, sort_by: str, last_files: int) -> list[Path]:
+    files = [Path(p) for p in glob.glob(glob_pattern)]
+    if sort_by == "mtime":
+        files.sort(key=lambda p: (p.stat().st_mtime, p.name))
+    else:
+        files.sort(key=lambda p: p.name)
+    if last_files > 0:
+        files = files[-last_files:]
+    return files
+
+
 def main() -> int:
     args = parse_args()
     rid_token = f"rid={args.rid}"
 
-    files = sorted(glob.glob(args.glob_pattern))
+    files = select_files(args.glob_pattern, args.sort_by, args.last_files)
     if not files:
         print(f"No files matched: {args.glob_pattern}")
         return 1
@@ -91,7 +114,10 @@ def main() -> int:
                         active_callsid = None
                         stop_markers += 1
 
-    print(f"Wrote {matched} lines to {out_path}")
+    print(
+        f"Wrote {matched} lines to {out_path} "
+        f"(files={len(files)} sort_by={args.sort_by} last_files={args.last_files})"
+    )
     print(f"Markers: ws_start={start_markers} ws_stop={stop_markers}")
     if matched == 0:
         print("No matching lines found for this rid.")
