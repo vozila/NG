@@ -158,6 +158,15 @@ def _playout_refill_hold_s() -> float:
     return max(0.0, _env_int("VOICE_TWILIO_REFILL_HOLD_MS", 0) / 1000.0)
 
 
+def _twilio_stats_log_enabled() -> bool:
+    return (os.getenv("VOICE_TWILIO_STATS_LOG_ENABLED") or "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
 def _sanitize_transcript_for_event(transcript: str, max_chars: int = 500) -> str:
     cleaned = " ".join(transcript.split()).strip()
     if not cleaned:
@@ -534,6 +543,7 @@ async def _twilio_sender_loop(
     playout_refill_hold_s = _playout_refill_hold_s()
     stall_warn_ms = max(20.0, _env_float("VOICE_SEND_STALL_WARN_MS", 35.0))
     stall_crit_ms = max(stall_warn_ms + 5.0, _env_float("VOICE_SEND_STALL_CRIT_MS", 60.0))
+    stats_log_enabled = _twilio_stats_log_enabled()
     stats_started = time.monotonic()
     frames_sent = 0
     underruns = 0
@@ -613,17 +623,18 @@ async def _twilio_sender_loop(
                 idle_late_ms_max = max(idle_late_ms_max, (now - next_due) * 1000.0)
                 next_due = now + FRAME_SLEEP_S
             if now - stats_started >= stats_every_s:
-                prebuf = bool(response_state.get("active_response_id")) and len(buffers.main) < prebuffer_frames
-                _dbg(
-                    f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
-                    f"frames_sent={frames_sent} underruns={underruns} idle_ticks={idle_ticks} "
-                    f"prebuf_waits={prebuf_waits} "
-                    f"late_ms_max={late_ms_max:.1f} prebuf={prebuf} "
-                    f"idle_late_ms_max={idle_late_ms_max:.1f} "
-                    f"send_gap_ms_max={send_gap_ms_max:.1f} "
-                    f"send_stall_warn_count={send_stall_warn_count} "
-                    f"send_stall_crit_count={send_stall_crit_count}"
-                )
+                if stats_log_enabled:
+                    prebuf = bool(response_state.get("active_response_id")) and len(buffers.main) < prebuffer_frames
+                    _dbg(
+                        f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
+                        f"frames_sent={frames_sent} underruns={underruns} idle_ticks={idle_ticks} "
+                        f"prebuf_waits={prebuf_waits} "
+                        f"late_ms_max={late_ms_max:.1f} prebuf={prebuf} "
+                        f"idle_late_ms_max={idle_late_ms_max:.1f} "
+                        f"send_gap_ms_max={send_gap_ms_max:.1f} "
+                        f"send_stall_warn_count={send_stall_warn_count} "
+                        f"send_stall_crit_count={send_stall_crit_count}"
+                    )
                 stats_started = now
                 frames_sent = 0
                 underruns = 0
@@ -687,17 +698,18 @@ async def _twilio_sender_loop(
                     logged_main_ids.add(rid)
 
         if now - stats_started >= stats_every_s:
-            prebuf = bool(response_state.get("active_response_id")) and len(buffers.main) < prebuffer_frames
-            _dbg(
-                f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
-                f"frames_sent={frames_sent} underruns={underruns} idle_ticks={idle_ticks} "
-                f"prebuf_waits={prebuf_waits} "
-                f"late_ms_max={late_ms_max:.1f} prebuf={prebuf} "
-                f"idle_late_ms_max={idle_late_ms_max:.1f} "
-                f"send_gap_ms_max={send_gap_ms_max:.1f} "
-                f"send_stall_warn_count={send_stall_warn_count} "
-                f"send_stall_crit_count={send_stall_crit_count}"
-            )
+            if stats_log_enabled:
+                prebuf = bool(response_state.get("active_response_id")) and len(buffers.main) < prebuffer_frames
+                _dbg(
+                    f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
+                    f"frames_sent={frames_sent} underruns={underruns} idle_ticks={idle_ticks} "
+                    f"prebuf_waits={prebuf_waits} "
+                    f"late_ms_max={late_ms_max:.1f} prebuf={prebuf} "
+                    f"idle_late_ms_max={idle_late_ms_max:.1f} "
+                    f"send_gap_ms_max={send_gap_ms_max:.1f} "
+                    f"send_stall_warn_count={send_stall_warn_count} "
+                    f"send_stall_crit_count={send_stall_crit_count}"
+                )
             stats_started = now
             frames_sent = 0
             underruns = 0
