@@ -167,6 +167,24 @@ def _twilio_stats_log_enabled() -> bool:
     )
 
 
+def _speech_ctrl_heartbeat_log_enabled() -> bool:
+    return (os.getenv("VOICE_SPEECH_CTRL_HEARTBEAT_LOG_ENABLED") or "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _minimal_hot_path_enabled() -> bool:
+    return (os.getenv("VOICE_TWILIO_MINIMAL_HOT_PATH") or "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
 def _sanitize_transcript_for_event(transcript: str, max_chars: int = 500) -> str:
     cleaned = " ".join(transcript.split()).strip()
     if not cleaned:
@@ -536,6 +554,7 @@ async def _twilio_sender_loop(
     response_state: dict[str, Any],
 ) -> None:
     """Send frames to Twilio at ~20ms pacing. Prefer main lane, then aux."""
+    minimal_hot_path = _minimal_hot_path_enabled()
     stats_every_s = max(0.25, _env_int("VOICE_TWILIO_STATS_EVERY_MS", 1000) / 1000.0)
     prebuffer_frames = _effective_prebuffer_frames(buffers.main_max_frames)
     playout_start_frames = _playout_start_frames(prebuffer_frames)
@@ -559,15 +578,56 @@ async def _twilio_sender_loop(
     last_send_rid: str | None = None
     prebuf_complete_logged_for_rid: str | None = None
     prebuf_open_for_rid: str | None = None
+    sid_for_fast_json: str | None = None
+    fast_json_prefix = ""
+    fast_json_suffix = '"}}'
 
     while True:
         sid = stream_sid_ref.get("streamSid")
         if not sid:
             await asyncio.sleep(0.01)
             continue
+        if minimal_hot_path and sid != sid_for_fast_json:
+            sid_for_fast_json = sid
+            # Fast path: avoid json.dumps per frame by reusing static envelope pieces.
+            fast_json_prefix = f'{{"event":"media","streamSid":"{sid}","media":{{"payload":"'
 
         frame: bytes | None = None
         lane = "none"
+        rid_for_send: str | None = None
+
+        if minimal_hot_path:
+            if buffers.main:
+                frame = buffers.main.popleft()
+                lane = "main"
+                rid_for_send = response_state.get("active_response_id")
+            elif wait_ctl.aux_enabled and buffers.aux:
+                frame = buffers.aux.popleft()
+                lane = "aux"
+
+            if frame is None:
+                await asyncio.sleep(0.005)
+                continue
+
+            payload = base64.b64encode(frame).decode("ascii")
+            msg = f"{fast_json_prefix}{payload}{fast_json_suffix}"
+            async with send_lock:
+                await websocket.send_text(msg)
+
+            if lane == "main" and isinstance(rid_for_send, str):
+                sent_map = response_state.get("sent_main_frames_by_id")
+                if isinstance(sent_map, dict):
+                    cur = sent_map.get(rid_for_send, 0)
+                    sent_map[rid_for_send] = int(cur) + 1
+
+            next_due = next_due + FRAME_SLEEP_S
+            sleep_s = next_due - time.monotonic()
+            if sleep_s > 0:
+                await asyncio.sleep(sleep_s)
+            else:
+                next_due = time.monotonic() + FRAME_SLEEP_S
+            continue
+
         if buffers.main:
             lane = "main"
             rid = response_state.get("active_response_id")
@@ -883,6 +943,10 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 if code == "invalid_value" and param == "response.modalities":
                     openai_output_modalities = ["audio", "text"]
                     _dbg(f"OPENAI_MODALITIES_FORCED output_modalities={openai_output_modalities} msg={msg!r}")
+
+                # Expected sometimes when fallback commit races with server-side auto-commit.
+                if code == "input_audio_buffer_commit_empty":
+                    continue
 
                 if code != "response_cancel_not_active":
                     _dbg(f"OPENAI_ERROR evt={evt!r}")
@@ -1284,16 +1348,18 @@ async def twilio_stream(websocket: WebSocket) -> None:
         nonlocal logged_media_absent, pending_input_commit_sent, pending_speech_started_at
         nonlocal pending_speech_started_media_frames
         every_s = max(0.5, _env_int("VOICE_SPEECH_CTRL_HEARTBEAT_MS", 2000) / 1000.0)
+        heartbeat_log_enabled = _speech_ctrl_heartbeat_log_enabled()
         while True:
             await asyncio.sleep(every_s)
             now = time.monotonic()
             media_idle_ms = int((now - (last_media_rx_ts or ws_started_at)) * 1000.0)
-            _dbg(
-                "speech_ctrl_HEARTBEAT "
-                f"enabled={bridge_enabled} shadow=False qsize={in_q.qsize()} "
-                f"active_response_id={response_state.get('active_response_id')} "
-                f"media_rx_frames={twilio_media_frames_rx} media_idle_ms={media_idle_ms}"
-            )
+            if heartbeat_log_enabled:
+                _dbg(
+                    "speech_ctrl_HEARTBEAT "
+                    f"enabled={bridge_enabled} shadow=False qsize={in_q.qsize()} "
+                    f"active_response_id={response_state.get('active_response_id')} "
+                    f"media_rx_frames={twilio_media_frames_rx} media_idle_ms={media_idle_ms}"
+                )
             if not logged_media_absent and twilio_media_frames_rx == 0 and (now - ws_started_at) >= 5.0:
                 _dbg("TWILIO_MEDIA_NOT_RECEIVED_AFTER_5S")
                 logged_media_absent = True
