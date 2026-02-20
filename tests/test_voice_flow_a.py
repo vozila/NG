@@ -15,6 +15,8 @@ from features.voice_flow_a import (
     _diag_init,
     _diag_score,
     _diag_update_frame,
+    _effective_prebuffer_frames,
+    _force_input_commit_min_frames,
     _force_input_commit_after_s,
     _force_input_commit_enabled,
     _flush_on_response_created_enabled,
@@ -175,15 +177,30 @@ def test_flush_on_response_created_enabled_override_off(monkeypatch) -> None:
 def test_force_input_commit_defaults(monkeypatch) -> None:
     monkeypatch.delenv("VOICE_FORCE_INPUT_COMMIT_FALLBACK", raising=False)
     monkeypatch.delenv("VOICE_FORCE_INPUT_COMMIT_MS", raising=False)
+    monkeypatch.delenv("VOICE_FORCE_INPUT_COMMIT_MIN_FRAMES", raising=False)
     assert _force_input_commit_enabled() is True
     assert _force_input_commit_after_s() == 1.4
+    assert _force_input_commit_min_frames() == 5
 
 
 def test_force_input_commit_env_overrides(monkeypatch) -> None:
     monkeypatch.setenv("VOICE_FORCE_INPUT_COMMIT_FALLBACK", "0")
     monkeypatch.setenv("VOICE_FORCE_INPUT_COMMIT_MS", "900")
+    monkeypatch.setenv("VOICE_FORCE_INPUT_COMMIT_MIN_FRAMES", "8")
     assert _force_input_commit_enabled() is False
     assert _force_input_commit_after_s() == 0.9
+    assert _force_input_commit_min_frames() == 8
+
+
+def test_effective_prebuffer_frames_has_guardrail(monkeypatch) -> None:
+    monkeypatch.delenv("VOICE_TWILIO_PREBUFFER_FRAMES", raising=False)
+    assert _effective_prebuffer_frames(200) == 80
+    monkeypatch.setenv("VOICE_TWILIO_PREBUFFER_FRAMES", "4")
+    assert _effective_prebuffer_frames(200) == 40
+    monkeypatch.setenv("VOICE_TWILIO_PREBUFFER_FRAMES", "120")
+    assert _effective_prebuffer_frames(200) == 120
+    monkeypatch.setenv("VOICE_TWILIO_PREBUFFER_FRAMES", "500")
+    assert _effective_prebuffer_frames(200) == 199
 
 
 def test_should_accept_response_audio_requires_active_response() -> None:

@@ -126,6 +126,36 @@ def _force_input_commit_after_s() -> float:
     return max(0.2, _env_int("VOICE_FORCE_INPUT_COMMIT_MS", 1400) / 1000.0)
 
 
+def _force_input_commit_min_frames() -> int:
+    # Twilio media frames are 20ms each; 5 frames ~= 100ms.
+    return max(1, _env_int("VOICE_FORCE_INPUT_COMMIT_MIN_FRAMES", 5))
+
+
+def _effective_prebuffer_frames(main_max_frames: int) -> int:
+    # Guardrails:
+    # - Very low prebuffer causes first-second garble.
+    # - Prebuffer must be below queue capacity, or sender can deadlock at prebuf=True.
+    target = max(40, _env_int("VOICE_TWILIO_PREBUFFER_FRAMES", 80))
+    max_safe = max(1, main_max_frames - 1)
+    return min(target, max_safe)
+
+
+def _playout_start_frames(prebuffer_frames: int) -> int:
+    # Startup jitter buffer (backend-style): wait for a small runway before first send.
+    target = _env_int("VOICE_TWILIO_START_BUFFER_FRAMES", 18)
+    return max(4, min(target, prebuffer_frames))
+
+
+def _playout_low_water_frames(start_frames: int) -> int:
+    # Once started, briefly hold when queue dips too low to avoid early garble/chop.
+    target = _env_int("VOICE_TWILIO_LOW_WATER_FRAMES", max(6, start_frames // 2))
+    return max(2, min(target, start_frames))
+
+
+def _playout_refill_hold_s() -> float:
+    return max(0.0, _env_int("VOICE_TWILIO_REFILL_HOLD_MS", 120) / 1000.0)
+
+
 def _sanitize_transcript_for_event(transcript: str, max_chars: int = 500) -> str:
     cleaned = " ".join(transcript.split()).strip()
     if not cleaned:
@@ -496,7 +526,10 @@ async def _twilio_sender_loop(
 ) -> None:
     """Send frames to Twilio at ~20ms pacing. Prefer main lane, then aux."""
     stats_every_s = max(0.25, _env_int("VOICE_TWILIO_STATS_EVERY_MS", 1000) / 1000.0)
-    prebuffer_frames = max(0, _env_int("VOICE_TWILIO_PREBUFFER_FRAMES", 80))
+    prebuffer_frames = _effective_prebuffer_frames(buffers.main_max_frames)
+    playout_start_frames = _playout_start_frames(prebuffer_frames)
+    playout_low_water_frames = _playout_low_water_frames(playout_start_frames)
+    playout_refill_hold_s = _playout_refill_hold_s()
     stall_warn_ms = max(20.0, _env_float("VOICE_SEND_STALL_WARN_MS", 35.0))
     stall_crit_ms = max(stall_warn_ms + 5.0, _env_float("VOICE_SEND_STALL_CRIT_MS", 60.0))
     stats_started = time.monotonic()
@@ -526,12 +559,17 @@ async def _twilio_sender_loop(
         if buffers.main:
             lane = "main"
             rid = response_state.get("active_response_id")
+            done_ids = response_state.get("processed_response_done_ids")
+            playout_started_ids = response_state.get("playout_started_ids")
+            refill_wait_started_by_id = response_state.get("refill_wait_started_by_id")
+            rid_done = isinstance(done_ids, set) and isinstance(rid, str) and rid in done_ids
             if (
                 isinstance(rid, str)
                 and rid
                 and prebuffer_frames > 0
                 and prebuf_open_for_rid != rid
                 and len(buffers.main) < prebuffer_frames
+                and not rid_done
             ):
                 prebuf_waits += 1
                 last_send_ts = None
@@ -563,6 +601,35 @@ async def _twilio_sender_loop(
                     send_gap_ms_max = 0.0
                 await asyncio.sleep(0.01)
                 continue
+            if isinstance(rid, str) and rid and isinstance(playout_started_ids, set):
+                # Startup runway: do not start sending until a small buffer is ready.
+                if rid not in playout_started_ids and not rid_done and len(buffers.main) < playout_start_frames:
+                    prebuf_waits += 1
+                    await asyncio.sleep(0.01)
+                    continue
+                if rid not in playout_started_ids:
+                    playout_started_ids.add(rid)
+                # Mid-turn refill hysteresis: short hold when buffer dips too low.
+                if (
+                    not rid_done
+                    and len(buffers.main) < playout_low_water_frames
+                    and isinstance(refill_wait_started_by_id, dict)
+                    and playout_refill_hold_s > 0.0
+                ):
+                    now = time.monotonic()
+                    started = refill_wait_started_by_id.get(rid)
+                    if not isinstance(started, float):
+                        refill_wait_started_by_id[rid] = now
+                        prebuf_waits += 1
+                        await asyncio.sleep(0.01)
+                        continue
+                    if (now - started) < playout_refill_hold_s:
+                        prebuf_waits += 1
+                        await asyncio.sleep(0.01)
+                        continue
+                    refill_wait_started_by_id.pop(rid, None)
+                elif isinstance(refill_wait_started_by_id, dict):
+                    refill_wait_started_by_id.pop(rid, None)
             frame = buffers.main.popleft()
             lane = "main"
         elif wait_ctl.aux_enabled and buffers.aux:
@@ -676,8 +743,14 @@ async def _twilio_sender_loop(
             send_stall_crit_count = 0
             send_gap_ms_max = 0.0
 
-        next_due = now + FRAME_SLEEP_S
-        await asyncio.sleep(FRAME_SLEEP_S)
+        # Keep a stable 20ms playout clock to normalize bursty producer output.
+        next_due = next_due + FRAME_SLEEP_S
+        sleep_s = next_due - time.monotonic()
+        if sleep_s > 0:
+            await asyncio.sleep(sleep_s)
+        else:
+            # If behind schedule, reset to now so we do not drift indefinitely.
+            next_due = time.monotonic() + FRAME_SLEEP_S
 
 
 @router.websocket("/twilio/stream")
@@ -723,6 +796,8 @@ async def twilio_stream(websocket: WebSocket) -> None:
         "logged_done_no_audio_ids": set(),
         "processed_response_done_ids": set(),
         "sent_main_frames_by_id": {},
+        "playout_started_ids": set(),
+        "refill_wait_started_by_id": {},
     }
 
     turn_seq = 0
@@ -741,6 +816,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
     call_stopped_emitted = False
     last_speech_started_ts: float | None = None
     pending_speech_started_at: float | None = None
+    pending_speech_started_media_frames: int | None = None
     pending_input_commit_sent = False
     twilio_media_frames_rx = 0
     last_media_rx_ts: float | None = None
@@ -785,7 +861,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
         nonlocal active_response_id, openai_output_modalities
         nonlocal turn_seq, turn_logged_speech_started, turn_logged_transcript, turn_logged_response_create
         nonlocal last_speech_started_ts
-        nonlocal pending_speech_started_at, pending_input_commit_sent
+        nonlocal pending_speech_started_at, pending_speech_started_media_frames, pending_input_commit_sent
 
         while True:
             raw = await openai_ws.recv()
@@ -849,6 +925,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     continue
                 last_speech_started_ts = now
                 pending_speech_started_at = now
+                pending_speech_started_media_frames = twilio_media_frames_rx
                 pending_input_commit_sent = False
                 turn_seq += 1
                 turn_logged_speech_started = False
@@ -911,6 +988,15 @@ async def twilio_stream(websocket: WebSocket) -> None:
 
             if etype == "input_audio_buffer.speech_stopped":
                 if _force_input_commit_enabled() and openai_ws is not None:
+                    min_frames = _force_input_commit_min_frames()
+                    start_frames = pending_speech_started_media_frames or twilio_media_frames_rx
+                    captured_frames = max(0, twilio_media_frames_rx - start_frames)
+                    if captured_frames < min_frames:
+                        _dbg(
+                            "OPENAI_INPUT_COMMIT_SKIPPED reason=speech_stopped "
+                            f"captured_frames={captured_frames} min_frames={min_frames}"
+                        )
+                        continue
                     try:
                         await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
                         pending_input_commit_sent = True
@@ -928,6 +1014,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     _dbg(f"OPENAI_TRANSCRIPT completed len={len(transcript)} turn={turn_seq}")
                     turn_logged_transcript = True
                 pending_speech_started_at = None
+                pending_speech_started_media_frames = None
                 pending_input_commit_sent = False
 
                 await _emit_flow_a_event(
@@ -1169,6 +1256,12 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     sent_map = response_state.get("sent_main_frames_by_id")
                     if isinstance(sent_map, dict):
                         sent_map.pop(rid, None)
+                    playout_started_ids = response_state.get("playout_started_ids")
+                    if isinstance(playout_started_ids, set):
+                        playout_started_ids.discard(rid)
+                    refill_wait_started_by_id = response_state.get("refill_wait_started_by_id")
+                    if isinstance(refill_wait_started_by_id, dict):
+                        refill_wait_started_by_id.pop(rid, None)
                     if len(buffers.remainder) < FRAME_BYTES:
                         buffers.remainder.clear()
                 if rid is None:
@@ -1211,6 +1304,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
 
     async def _speech_ctrl_heartbeat_loop() -> None:
         nonlocal logged_media_absent, pending_input_commit_sent, pending_speech_started_at
+        nonlocal pending_speech_started_media_frames
         every_s = max(0.5, _env_int("VOICE_SPEECH_CTRL_HEARTBEAT_MS", 2000) / 1000.0)
         while True:
             await asyncio.sleep(every_s)
@@ -1234,6 +1328,15 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 and active_response_id is None
                 and (now - pending_speech_started_at) >= _force_input_commit_after_s()
             ):
+                min_frames = _force_input_commit_min_frames()
+                start_frames = pending_speech_started_media_frames or twilio_media_frames_rx
+                captured_frames = max(0, twilio_media_frames_rx - start_frames)
+                if captured_frames < min_frames:
+                    _dbg(
+                        "OPENAI_INPUT_COMMIT_SKIPPED reason=heartbeat_fallback "
+                        f"captured_frames={captured_frames} min_frames={min_frames}"
+                    )
+                    continue
                 try:
                     await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
                     pending_input_commit_sent = True
