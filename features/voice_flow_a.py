@@ -208,6 +208,23 @@ def _twilio_mark_enabled() -> bool:
     )
 
 
+def _barge_in_context_note_enabled() -> bool:
+    return (os.getenv("VOICE_BARGE_IN_CONTEXT_NOTE") or "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _barge_in_context_note_text() -> str:
+    return (
+        (os.getenv("VOICE_BARGE_IN_CONTEXT_NOTE_TEXT") or "").strip()
+        or "Caller barged in. Your previous response audio was interrupted and may not have been heard. "
+        "Do not restart the conversation. If the caller says continue/go on, continue the interrupted thought."
+    )
+
+
 def _sanitize_transcript_for_event(transcript: str, max_chars: int = 500) -> str:
     cleaned = " ".join(transcript.split()).strip()
     if not cleaned:
@@ -1070,6 +1087,27 @@ async def twilio_stream(websocket: WebSocket) -> None:
                                 f"active_response_id={active_response_id}"
                             )
                         await openai_ws.send(json.dumps({"type": "response.cancel"}))
+                        if _barge_in_context_note_enabled():
+                            try:
+                                await openai_ws.send(
+                                    json.dumps(
+                                        {
+                                            "type": "conversation.item.create",
+                                            "item": {
+                                                "type": "message",
+                                                "role": "system",
+                                                "content": [
+                                                    {
+                                                        "type": "input_text",
+                                                        "text": _barge_in_context_note_text(),
+                                                    }
+                                                ],
+                                            },
+                                        }
+                                    )
+                                )
+                            except Exception as e:
+                                _dbg(f"BARGE_IN_CONTEXT_NOTE_FAILED err={e!r}")
                     else:
                         _dbg(
                             "BARGE-IN_IGNORED_EARLY "
@@ -1096,6 +1134,9 @@ async def twilio_stream(websocket: WebSocket) -> None:
 
             if etype == "input_audio_buffer.speech_stopped":
                 if _force_input_commit_enabled() and openai_ws is not None:
+                    if pending_input_commit_sent:
+                        _dbg("OPENAI_INPUT_COMMIT_SKIPPED reason=speech_stopped already_committed=1")
+                        continue
                     min_frames = _force_input_commit_min_frames()
                     start_frames = pending_speech_started_media_frames or twilio_media_frames_rx
                     captured_frames = max(0, twilio_media_frames_rx - start_frames)

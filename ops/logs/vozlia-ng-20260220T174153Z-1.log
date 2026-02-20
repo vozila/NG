@@ -1,0 +1,54 @@
+2026-02-20 17:42:00  clientIP="54.88.167.91" requestID="c0992762-6744-4eb4" responseTimeMS=3 responseBytes=531 userAgent="TwilioProxy/1.1"
+2026-02-20 17:42:08  clientIP="52.0.152.85" requestID="b91407ac-fdf3-4b71" responseTimeMS=4 responseBytes=677 userAgent="TwilioProxy/1.1"
+2026-02-20 17:42:13  2026-02-20 17:42:13,068 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 17:42:13  2026-02-20 17:42:13,068 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=1
+2026-02-20 17:42:13  2026-02-20 17:42:13,987 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 17:42:14  2026-02-20 17:42:14,284 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=6 turn=1
+2026-02-20 17:42:14  2026-02-20 17:42:14,403 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CA6c11c670578532a0f0fb7bfbaaa622ab
+2026-02-20 17:42:14  2026-02-20 17:42:14,404 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=1 modalities=['audio', 'text']
+2026-02-20 17:42:14  2026-02-20 17:42:14,461 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBOo2M3zS2rLFg021npG1
+2026-02-20 17:42:15  2026-02-20 17:42:15,053 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBOo2M3zS2rLFg021npG1 bytes=800
+2026-02-20 17:42:15  2026-02-20 17:42:15,570 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBOo2M3zS2rLFg021npG1 output_modalities=None
+2026-02-20 17:42:15  2026-02-20 17:42:15,571 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBOo2M3zS2rLFg021npG1 dt_ms=1109
+2026-02-20 17:42:15  2026-02-20 17:42:15,571 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBOo2M3zS2rLFg021npG1 score=ok frames=112 chunks=9 bytes=17920 same_ratio=0.00 same_run_max=1 low_div_ratio=0.18 silence_ratio=0.00
+2026-02-20 17:42:15  2026-02-20 17:42:15,708 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CA6c11c670578532a0f0fb7bfbaaa622ab
+2026-02-20 17:42:15  2026-02-20 17:42:15,708 INFO vozlia_ng Response resp_DBOo2M3zS2rLFg021npG1 finished with event 'response.done'; clearing active_response_id
+2026-02-20 17:42:20  2026-02-20 17:42:20,165 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 17:42:20  2026-02-20 17:42:20,165 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=2
+2026-02-20 17:42:22  2026-02-20 17:42:22,360 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=heartbeat_fallback dt_ms=2194
+2026-02-20 17:42:22  2026-02-20 17:42:22,366 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 17:42:23  2026-02-20 17:42:23,492 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=19 turn=2
+2026-02-20 17:42:23  2026-02-20 17:42:23,624 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CA6c11c670578532a0f0fb7bfbaaa622ab
+2026-02-20 17:42:23  2026-02-20 17:42:23,625 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=2 modalities=['audio', 'text']
+2026-02-20 17:42:23  2026-02-20 17:42:23,683 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBOoBenYYoqKY6ePKLapA
+2026-02-20 17:42:24  2026-02-20 17:42:24,008 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBOoBenYYoqKY6ePKLapA bytes=800
+2026-02-20 17:42:28  2026-02-20 17:42:28,486 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBOoBenYYoqKY6ePKLapA output_modalities=None
+2026-02-20 17:42:28  2026-02-20 17:42:28,487 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBOoBenYYoqKY6ePKLapA dt_ms=4803
+2026-02-20 17:42:28  2026-02-20 17:42:28,487 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBOoBenYYoqKY6ePKLapA score=ok frames=1062 chunks=85 bytes=169920 same_ratio=0.00 same_run_max=1 low_div_ratio=0.04 silence_ratio=0.00
+2026-02-20 17:42:28  2026-02-20 17:42:28,581 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CA6c11c670578532a0f0fb7bfbaaa622ab
+2026-02-20 17:42:28  2026-02-20 17:42:28,582 INFO vozlia_ng Response resp_DBOoBenYYoqKY6ePKLapA finished with event 'response.done'; clearing active_response_id
+2026-02-20 17:42:31  2026-02-20 17:42:31,544 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 17:42:31  2026-02-20 17:42:31,545 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=3
+2026-02-20 17:42:32  2026-02-20 17:42:32,526 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 17:42:32  2026-02-20 17:42:32,933 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=8 turn=3
+2026-02-20 17:42:32  2026-02-20 17:42:32,944 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CA6c11c670578532a0f0fb7bfbaaa622ab
+2026-02-20 17:42:32  2026-02-20 17:42:32,944 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=3 modalities=['audio', 'text']
+2026-02-20 17:42:32  2026-02-20 17:42:32,999 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBOoKRHieF6iaO2ie6NaM
+2026-02-20 17:42:33  2026-02-20 17:42:33,326 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBOoKRHieF6iaO2ie6NaM bytes=800
+2026-02-20 17:42:34  2026-02-20 17:42:34,203 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBOoKRHieF6iaO2ie6NaM output_modalities=None
+2026-02-20 17:42:34  2026-02-20 17:42:34,203 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBOoKRHieF6iaO2ie6NaM dt_ms=1204
+2026-02-20 17:42:34  2026-02-20 17:42:34,203 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBOoKRHieF6iaO2ie6NaM score=ok frames=197 chunks=15 bytes=31520 same_ratio=0.00 same_run_max=1 low_div_ratio=0.19 silence_ratio=0.00
+2026-02-20 17:42:34  2026-02-20 17:42:34,211 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CA6c11c670578532a0f0fb7bfbaaa622ab
+2026-02-20 17:42:34  2026-02-20 17:42:34,211 INFO vozlia_ng Response resp_DBOoKRHieF6iaO2ie6NaM finished with event 'response.done'; clearing active_response_id
+2026-02-20 17:42:39  2026-02-20 17:42:39,186 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 17:42:39  2026-02-20 17:42:39,186 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=4
+2026-02-20 17:42:40  2026-02-20 17:42:40,051 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 17:42:40  2026-02-20 17:42:40,345 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=5 turn=4
+2026-02-20 17:42:40  2026-02-20 17:42:40,356 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CA6c11c670578532a0f0fb7bfbaaa622ab
+2026-02-20 17:42:40  2026-02-20 17:42:40,356 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=4 modalities=['audio', 'text']
+2026-02-20 17:42:40  2026-02-20 17:42:40,411 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBOoSyFY7ZmfmExaBOhGU
+2026-02-20 17:42:40  2026-02-20 17:42:40,709 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBOoSyFY7ZmfmExaBOhGU bytes=800
+2026-02-20 17:42:42  2026-02-20 17:42:42,679 INFO vozlia_ng TWILIO_WS_STOP streamSid=MZb16a2768243407c086169efbf8a6c47b callSid=CA6c11c670578532a0f0fb7bfbaaa622ab
+2026-02-20 17:42:42  2026-02-20 17:42:42,697 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.call_stopped tenant_id=tenant_demo rid=CA6c11c670578532a0f0fb7bfbaaa622ab
+2026-02-20 17:42:43  clientIP="54.198.179.30" requestID="" responseTimeMS=35326 responseBytes=0 userAgent="Twilio.TmeWs/1.0"
+2026-02-20 17:42:43  INFO:     connection closed
