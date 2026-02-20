@@ -81,11 +81,20 @@ def _speech_started_debounce_s() -> float:
 
 
 def _barge_in_min_response_ms() -> int:
-    return max(0, _env_int("VOICE_BARGE_IN_MIN_RESPONSE_MS", 450))
+    return max(0, _env_int("VOICE_BARGE_IN_MIN_RESPONSE_MS", 700))
 
 
 def _barge_in_min_frames() -> int:
-    return max(0, _env_int("VOICE_BARGE_IN_MIN_FRAMES", 15))
+    return max(0, _env_int("VOICE_BARGE_IN_MIN_FRAMES", 25))
+
+
+def _flush_on_response_created_enabled() -> bool:
+    return (os.getenv("VOICE_FLUSH_ON_RESPONSE_CREATED") or "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def _initial_greeting_enabled() -> bool:
@@ -262,6 +271,14 @@ def _chunk_to_frames(remainder: bytearray, chunk: bytes, *, frame_bytes: int = F
 
 def _audio_queue_bytes(buffers: OutgoingAudioBuffers) -> int:
     return (len(buffers.main) * FRAME_BYTES) + (len(buffers.aux) * FRAME_BYTES) + len(buffers.remainder)
+
+
+def _flush_output_audio_buffers(buffers: OutgoingAudioBuffers) -> int:
+    dropped = _audio_queue_bytes(buffers)
+    buffers.main.clear()
+    buffers.aux.clear()
+    buffers.remainder.clear()
+    return dropped
 
 
 def _diag_init() -> dict[str, int]:
@@ -466,7 +483,7 @@ async def _twilio_sender_loop(
 ) -> None:
     """Send frames to Twilio at ~20ms pacing. Prefer main lane, then aux."""
     stats_every_s = max(0.25, _env_int("VOICE_TWILIO_STATS_EVERY_MS", 1000) / 1000.0)
-    prebuffer_frames = max(0, _env_int("VOICE_TWILIO_PREBUFFER_FRAMES", 50))
+    prebuffer_frames = max(0, _env_int("VOICE_TWILIO_PREBUFFER_FRAMES", 80))
     stall_warn_ms = max(20.0, _env_float("VOICE_SEND_STALL_WARN_MS", 35.0))
     stall_crit_ms = max(stall_warn_ms + 5.0, _env_float("VOICE_SEND_STALL_CRIT_MS", 60.0))
     stats_started = time.monotonic()
@@ -821,6 +838,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 turn_logged_response_create = False
 
                 _dbg("OpenAI VAD: user speech START")
+                had_buffered_audio = bool(buffers.main) or bool(buffers.aux) or bool(buffers.remainder)
                 if active_response_id:
                     can_barge = _barge_in_allowed(
                         active_response_id=active_response_id,
@@ -831,7 +849,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
                         min_frames=_barge_in_min_frames(),
                     )
                     if can_barge:
-                        buffers.main.clear()
+                        dropped_bytes = _flush_output_audio_buffers(buffers)
                         wait_ctl.on_user_speech_started(buffers=buffers)
 
                         sid = stream_sid_ref.get("streamSid")
@@ -843,6 +861,11 @@ async def twilio_stream(websocket: WebSocket) -> None:
                             "BARGE-IN: user speech started while AI speaking; "
                             "canceling active response and clearing audio buffer."
                         )
+                        if dropped_bytes > 0:
+                            _dbg(
+                                f"AUDIO_BUFFER_FLUSH_ON_SPEECH_STARTED dropped_bytes={dropped_bytes} "
+                                f"active_response_id={active_response_id}"
+                            )
                         await openai_ws.send(json.dumps({"type": "response.cancel"}))
                     else:
                         _dbg(
@@ -850,6 +873,18 @@ async def twilio_stream(websocket: WebSocket) -> None:
                             f"response_id={active_response_id} "
                             f"min_ms={_barge_in_min_response_ms()} min_frames={_barge_in_min_frames()}"
                         )
+                elif had_buffered_audio:
+                    dropped_bytes = _flush_output_audio_buffers(buffers)
+                    wait_ctl.on_user_speech_started(buffers=buffers)
+                    sid = stream_sid_ref.get("streamSid")
+                    if sid:
+                        async with send_lock:
+                            await websocket.send_text(json.dumps(_build_twilio_clear_msg(sid)))
+                        _dbg("TWILIO_CLEAR_SENT")
+                    _dbg(
+                        "AUDIO_BUFFER_FLUSH_ON_SPEECH_STARTED "
+                        f"dropped_bytes={dropped_bytes} active_response_id=None"
+                    )
 
                 if not turn_logged_speech_started:
                     _dbg(f"OPENAI_SPEECH_STARTED turn={turn_seq}")
@@ -897,6 +932,18 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 response = evt.get("response") if isinstance(evt.get("response"), dict) else {}
                 rid = response.get("id")
                 if isinstance(rid, str) and rid:
+                    if _flush_on_response_created_enabled():
+                        dropped_bytes = _flush_output_audio_buffers(buffers)
+                        if dropped_bytes > 0:
+                            sid = stream_sid_ref.get("streamSid")
+                            if sid:
+                                async with send_lock:
+                                    await websocket.send_text(json.dumps(_build_twilio_clear_msg(sid)))
+                                _dbg("TWILIO_CLEAR_SENT")
+                            _dbg(
+                                f"AUDIO_BUFFER_FLUSH_ON_RESPONSE_CREATED response_id={rid} "
+                                f"dropped_bytes={dropped_bytes}"
+                            )
                     active_response_id = rid
                     response_state["active_response_id"] = rid
                     response_started_at[rid] = time.monotonic()

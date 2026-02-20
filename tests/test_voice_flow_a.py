@@ -15,6 +15,8 @@ from features.voice_flow_a import (
     _diag_init,
     _diag_score,
     _diag_update_frame,
+    _flush_on_response_created_enabled,
+    _flush_output_audio_buffers,
     _initial_greeting_enabled,
     _initial_greeting_text,
     _is_sender_underrun_state,
@@ -83,6 +85,18 @@ def test_audio_queue_bytes_counts_main_aux_and_remainder() -> None:
     assert _audio_queue_bytes(buffers) == (3 * 160) + 10
 
 
+def test_flush_output_audio_buffers_clears_all_lanes_and_remainder() -> None:
+    buffers = OutgoingAudioBuffers()
+    buffers.main.extend([b"a" * 160, b"b" * 160])
+    buffers.aux.append(b"c" * 160)
+    buffers.remainder.extend(b"d" * 11)
+    dropped = _flush_output_audio_buffers(buffers)
+    assert dropped == (3 * 160) + 11
+    assert len(buffers.main) == 0
+    assert len(buffers.aux) == 0
+    assert len(buffers.remainder) == 0
+
+
 def test_is_sender_underrun_state_active_response() -> None:
     buffers = OutgoingAudioBuffers()
     state = {"active_response_id": "resp_123"}
@@ -144,6 +158,16 @@ def test_initial_greeting_env_overrides(monkeypatch) -> None:
     monkeypatch.setenv("VOZ_FLOW_A_INITIAL_GREETING_TEXT", "Say hello.")
     assert _initial_greeting_enabled() is True
     assert _initial_greeting_text() == "Say hello."
+
+
+def test_flush_on_response_created_enabled_default_on(monkeypatch) -> None:
+    monkeypatch.delenv("VOICE_FLUSH_ON_RESPONSE_CREATED", raising=False)
+    assert _flush_on_response_created_enabled() is True
+
+
+def test_flush_on_response_created_enabled_override_off(monkeypatch) -> None:
+    monkeypatch.setenv("VOICE_FLUSH_ON_RESPONSE_CREATED", "0")
+    assert _flush_on_response_created_enabled() is False
 
 
 def test_should_accept_response_audio_requires_active_response() -> None:
