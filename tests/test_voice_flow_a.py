@@ -18,6 +18,7 @@ from features.voice_flow_a import (
     _lifecycle_event_payload,
     _resolve_actor_mode_policy,
     _sanitize_transcript_for_event,
+    _speech_started_debounce_s,
 )
 
 
@@ -115,6 +116,16 @@ def test_diag_score_bad_for_highly_repetitive_audio() -> None:
         _diag_update_frame(diag, frame, prev)
         prev = frame
     assert _diag_score(diag) == "bad"
+
+
+def test_vad_speech_started_debounce_env_default(monkeypatch) -> None:
+    monkeypatch.delenv("VOICE_VAD_SPEECH_STARTED_DEBOUNCE_MS", raising=False)
+    assert _speech_started_debounce_s() == 0.3
+
+
+def test_vad_speech_started_debounce_env_override(monkeypatch) -> None:
+    monkeypatch.setenv("VOICE_VAD_SPEECH_STARTED_DEBOUNCE_MS", "450")
+    assert _speech_started_debounce_s() == 0.45
 
 
 def test_build_twilio_clear_msg() -> None:

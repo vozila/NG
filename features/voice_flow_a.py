@@ -76,6 +76,10 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _speech_started_debounce_s() -> float:
+    return max(0.0, _env_int("VOICE_VAD_SPEECH_STARTED_DEBOUNCE_MS", 300) / 1000.0)
+
+
 def _sanitize_transcript_for_event(transcript: str, max_chars: int = 500) -> str:
     cleaned = " ".join(transcript.split()).strip()
     if not cleaned:
@@ -644,6 +648,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
     call_to_number: str | None = None
     event_emit_enabled = _event_emit_enabled()
     call_stopped_emitted = False
+    last_speech_started_ts: float | None = None
     response_started_at: dict[str, float] = {}
     response_audio_diag: dict[str, dict[str, int]] = {}
     response_last_frame: dict[str, bytes] = {}
@@ -682,6 +687,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
         nonlocal logged_session_created, logged_session_updated, openai_input_blocked_unknown_param
         nonlocal active_response_id, openai_output_modalities
         nonlocal turn_seq, turn_logged_speech_started, turn_logged_transcript, turn_logged_response_create
+        nonlocal last_speech_started_ts
 
         while True:
             raw = await openai_ws.recv()
@@ -731,6 +737,19 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 continue
 
             if etype == "input_audio_buffer.speech_started":
+                now = time.monotonic()
+                debounce_s = _speech_started_debounce_s()
+                if (
+                    isinstance(last_speech_started_ts, float)
+                    and debounce_s > 0.0
+                    and (now - last_speech_started_ts) < debounce_s
+                ):
+                    _dbg(
+                        "OPENAI_SPEECH_STARTED_DEBOUNCED "
+                        f"dt_ms={int((now - last_speech_started_ts) * 1000.0)}"
+                    )
+                    continue
+                last_speech_started_ts = now
                 turn_seq += 1
                 turn_logged_speech_started = False
                 turn_logged_transcript = False
