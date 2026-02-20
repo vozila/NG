@@ -287,6 +287,101 @@ def _resolve_mode_instructions(ai_mode: str) -> str | None:
     return (os.getenv(f"VOZ_FLOW_A_INSTRUCTIONS_{suffix}") or "").strip() or None
 
 
+def _customer_safe_baseline_instructions() -> str:
+    default = (
+        "Customer-safe policy:\n"
+        "- Do not claim uncertain facts as certain.\n"
+        "- If profile details are missing, say you can connect them with staff for confirmation.\n"
+        "- Use concise, polite language suitable for callers.\n"
+        "- If request needs a manager/owner decision (exceptions, disputes, custom pricing), "
+        "offer escalation and capture callback details."
+    )
+    return (os.getenv("VOZ_FLOW_A_CUSTOMER_SAFE_BASELINE") or "").strip() or default
+
+
+def _resolve_customer_knowledge_context(*, custom_parameters: dict[str, Any]) -> dict[str, str | None]:
+    def _clean(v: Any) -> str | None:
+        if not isinstance(v, str):
+            return None
+        s = v.strip()
+        return s or None
+
+    template_key = _clean(
+        custom_parameters.get("template_key")
+        or custom_parameters.get("business_template_key")
+        or custom_parameters.get("template")
+        or os.getenv("VOZ_FLOW_A_DEFAULT_TEMPLATE_KEY")
+    )
+    profile_version = _clean(
+        custom_parameters.get("profile_version")
+        or custom_parameters.get("business_profile_version")
+        or os.getenv("VOZ_FLOW_A_DEFAULT_PROFILE_VERSION")
+    )
+    profile_hash = _clean(
+        custom_parameters.get("profile_hash")
+        or custom_parameters.get("business_profile_hash")
+        or custom_parameters.get("profile_revision_hash")
+        or os.getenv("VOZ_FLOW_A_DEFAULT_PROFILE_HASH")
+    )
+    profile_summary = _clean(
+        custom_parameters.get("profile_summary")
+        or custom_parameters.get("business_profile_summary")
+        or os.getenv("VOZ_FLOW_A_DEFAULT_PROFILE_SUMMARY")
+    )
+    template_prompt = _clean(
+        custom_parameters.get("template_prompt")
+        or custom_parameters.get("business_template_prompt")
+        or os.getenv("VOZ_FLOW_A_DEFAULT_TEMPLATE_PROMPT")
+    )
+
+    return {
+        "template_key": template_key,
+        "profile_version": profile_version,
+        "profile_hash": profile_hash,
+        "profile_summary": profile_summary,
+        "template_prompt": template_prompt,
+    }
+
+
+def _build_customer_instructions(
+    *,
+    base_instructions: str | None,
+    mode_instructions: str | None,
+    knowledge_context: dict[str, str | None],
+) -> str:
+    blocks: list[str] = []
+
+    primary = (mode_instructions or base_instructions or "").strip()
+    if primary:
+        blocks.append(primary)
+
+    baseline = _customer_safe_baseline_instructions().strip()
+    if baseline:
+        blocks.append(baseline)
+
+    template_key = knowledge_context.get("template_key")
+    profile_version = knowledge_context.get("profile_version")
+    profile_hash = knowledge_context.get("profile_hash")
+    profile_summary = knowledge_context.get("profile_summary")
+    template_prompt = knowledge_context.get("template_prompt")
+
+    context_lines: list[str] = []
+    if template_key:
+        context_lines.append(f"- template_key: {template_key}")
+    if profile_version:
+        context_lines.append(f"- profile_version: {profile_version}")
+    if profile_hash:
+        context_lines.append(f"- profile_hash: {profile_hash}")
+    if profile_summary:
+        context_lines.append(f"- profile_summary: {profile_summary}")
+    if template_prompt:
+        context_lines.append(f"- template_prompt: {template_prompt}")
+    if context_lines:
+        blocks.append("Knowledge context:\n" + "\n".join(context_lines))
+
+    return "\n\n".join(blocks).strip()
+
+
 def _resolve_actor_mode_policy(tenant_id: str | None, actor_mode: str | None) -> tuple[str, str | None]:
     base_voice = _env_str("VOZ_OPENAI_REALTIME_VOICE", "marin")
     base_instructions = (os.getenv("VOZ_OPENAI_REALTIME_INSTRUCTIONS") or "").strip() or None
@@ -1652,7 +1747,8 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 start = evt.get("start") or {}
                 stream_sid_ref["streamSid"] = start.get("streamSid")
                 call_sid = start.get("callSid")
-                custom = start.get("customParameters") or {}
+                custom_raw = start.get("customParameters")
+                custom = custom_raw if isinstance(custom_raw, dict) else {}
 
                 rid = custom.get("rid") or call_sid
                 tenant_id_raw = custom.get("tenant_id")
@@ -1674,7 +1770,14 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 actor_mode = "owner" if ai_mode == "owner" else "client"
                 voice, instructions = _resolve_actor_mode_policy(tenant_id, actor_mode)
                 mode_instructions = _resolve_mode_instructions(ai_mode)
-                if mode_instructions:
+                knowledge_context = _resolve_customer_knowledge_context(custom_parameters=custom)
+                if ai_mode == "customer":
+                    instructions = _build_customer_instructions(
+                        base_instructions=instructions,
+                        mode_instructions=mode_instructions,
+                        knowledge_context=knowledge_context,
+                    )
+                elif mode_instructions:
                     instructions = mode_instructions
 
                 _dbg(
@@ -1688,6 +1791,13 @@ async def twilio_stream(websocket: WebSocket) -> None:
                 if not logged_mode_selection:
                     _dbg(f"VOICE_FLOW_A_MODE_SELECTED ai_mode={ai_mode} tenant_id={tenant_id} rid={rid}")
                     logged_mode_selection = True
+                if ai_mode == "customer":
+                    _dbg(
+                        "FLOW_A_KNOWLEDGE_CONTEXT "
+                        f"template_key={knowledge_context.get('template_key')} "
+                        f"profile_version={knowledge_context.get('profile_version')} "
+                        f"profile_hash={knowledge_context.get('profile_hash')}"
+                    )
 
                 await _emit_flow_a_event(
                     enabled=event_emit_enabled,
@@ -1706,6 +1816,23 @@ async def twilio_stream(websocket: WebSocket) -> None:
                     ),
                     idempotency_key=f"{call_rid}:call_started" if call_rid else None,
                 )
+                if ai_mode == "customer":
+                    await _emit_flow_a_event(
+                        enabled=event_emit_enabled,
+                        tenant_id=call_tenant_id,
+                        rid=call_rid,
+                        event_type="flow_a.knowledge_context",
+                        payload={
+                            "tenant_id": call_tenant_id,
+                            "rid": call_rid,
+                            "ai_mode": call_ai_mode,
+                            "tenant_mode": call_tenant_mode,
+                            "template_key": knowledge_context.get("template_key"),
+                            "profile_version": knowledge_context.get("profile_version"),
+                            "profile_hash": knowledge_context.get("profile_hash"),
+                        },
+                        idempotency_key=f"{call_rid}:knowledge_context" if call_rid else None,
+                    )
 
                 if bridge_enabled:
                     try:

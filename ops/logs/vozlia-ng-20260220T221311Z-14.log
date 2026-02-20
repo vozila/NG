@@ -1,0 +1,23 @@
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T21:15:34Z end=2026-02-20T21:15:36Z
+Error: error listing logs: Get "https://api.render.com/v1/logs?direction=forward&endTime=2026-02-20T21%3A15%3A36Z&limit=500&ownerId=tea-d4pmgeili9vc739f6oh0&resource=srv-d6ahnh3nv86c739n0jo0&startTime=2026-02-20T21%3A15%3A34Z": read tcp 192.168.1.159:56304->216.24.57.250:443: read: connection reset by peer
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")

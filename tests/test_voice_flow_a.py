@@ -9,6 +9,7 @@ from features.voice_flow_a import (
     WaitingAudioController,
     _audio_queue_bytes,
     _barge_in_allowed,
+    _build_customer_instructions,
     _build_openai_session_update,
     _build_twilio_clear_msg,
     _build_twilio_mark_msg,
@@ -29,6 +30,7 @@ from features.voice_flow_a import (
     _playout_low_water_frames,
     _playout_refill_hold_s,
     _playout_start_frames,
+    _resolve_customer_knowledge_context,
     _resolve_actor_mode_policy,
     _sanitize_transcript_for_event,
     _should_accept_response_audio,
@@ -393,6 +395,84 @@ def test_resolve_actor_mode_policy_when_kill_switch_off_uses_base_env(monkeypatc
     voice, instructions = _resolve_actor_mode_policy("tenant_demo", "owner")
     assert voice == "marin"
     assert instructions == "base instructions"
+
+
+def test_resolve_customer_knowledge_context_from_custom_parameters(monkeypatch) -> None:
+    monkeypatch.delenv("VOZ_FLOW_A_DEFAULT_TEMPLATE_KEY", raising=False)
+    monkeypatch.delenv("VOZ_FLOW_A_DEFAULT_PROFILE_VERSION", raising=False)
+    monkeypatch.delenv("VOZ_FLOW_A_DEFAULT_PROFILE_HASH", raising=False)
+    monkeypatch.delenv("VOZ_FLOW_A_DEFAULT_PROFILE_SUMMARY", raising=False)
+    monkeypatch.delenv("VOZ_FLOW_A_DEFAULT_TEMPLATE_PROMPT", raising=False)
+
+    ctx = _resolve_customer_knowledge_context(
+        custom_parameters={
+            "template_key": "salon_v1",
+            "business_profile_version": "42",
+            "business_profile_hash": "sha256:abc123",
+            "business_profile_summary": "Hours 9-5; haircut from $30",
+            "business_template_prompt": "Highlight booking availability.",
+        }
+    )
+    assert ctx["template_key"] == "salon_v1"
+    assert ctx["profile_version"] == "42"
+    assert ctx["profile_hash"] == "sha256:abc123"
+    assert ctx["profile_summary"] == "Hours 9-5; haircut from $30"
+    assert ctx["template_prompt"] == "Highlight booking availability."
+
+
+def test_resolve_customer_knowledge_context_falls_back_to_env(monkeypatch) -> None:
+    monkeypatch.setenv("VOZ_FLOW_A_DEFAULT_TEMPLATE_KEY", "default_tpl")
+    monkeypatch.setenv("VOZ_FLOW_A_DEFAULT_PROFILE_VERSION", "3")
+    monkeypatch.setenv("VOZ_FLOW_A_DEFAULT_PROFILE_HASH", "hash_xyz")
+    monkeypatch.setenv("VOZ_FLOW_A_DEFAULT_PROFILE_SUMMARY", "Default profile summary")
+    monkeypatch.setenv("VOZ_FLOW_A_DEFAULT_TEMPLATE_PROMPT", "Default template prompt")
+
+    ctx = _resolve_customer_knowledge_context(custom_parameters={})
+    assert ctx["template_key"] == "default_tpl"
+    assert ctx["profile_version"] == "3"
+    assert ctx["profile_hash"] == "hash_xyz"
+    assert ctx["profile_summary"] == "Default profile summary"
+    assert ctx["template_prompt"] == "Default template prompt"
+
+
+def test_build_customer_instructions_includes_baseline_and_knowledge(monkeypatch) -> None:
+    monkeypatch.setenv("VOZ_FLOW_A_CUSTOMER_SAFE_BASELINE", "Use careful customer-safe language.")
+    out = _build_customer_instructions(
+        base_instructions="Base policy.",
+        mode_instructions="Customer mode policy.",
+        knowledge_context={
+            "template_key": "salon_v1",
+            "profile_version": "7",
+            "profile_hash": "hash_7",
+            "profile_summary": "Haircut from $30.",
+            "template_prompt": "Be brief and practical.",
+        },
+    )
+    assert "Customer mode policy." in out
+    assert "Use careful customer-safe language." in out
+    assert "template_key: salon_v1" in out
+    assert "profile_version: 7" in out
+    assert "profile_hash: hash_7" in out
+    assert "profile_summary: Haircut from $30." in out
+    assert "template_prompt: Be brief and practical." in out
+
+
+def test_build_customer_instructions_uses_base_when_mode_missing(monkeypatch) -> None:
+    monkeypatch.setenv("VOZ_FLOW_A_CUSTOMER_SAFE_BASELINE", "Escalate when needed.")
+    out = _build_customer_instructions(
+        base_instructions="Base instructions only.",
+        mode_instructions=None,
+        knowledge_context={
+            "template_key": None,
+            "profile_version": None,
+            "profile_hash": None,
+            "profile_summary": None,
+            "template_prompt": None,
+        },
+    )
+    assert "Base instructions only." in out
+    assert "Escalate when needed." in out
+    assert "Knowledge context:" not in out
 
 
 def test_emit_flow_a_event_kill_switch_off_makes_no_db_calls(monkeypatch) -> None:
