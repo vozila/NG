@@ -566,9 +566,9 @@ async def _twilio_sender_loop(
             if (
                 isinstance(rid, str)
                 and rid
-                and prebuffer_frames > 0
+                and playout_start_frames > 0
                 and prebuf_open_for_rid != rid
-                and len(buffers.main) < prebuffer_frames
+                and len(buffers.main) < playout_start_frames
                 and not rid_done
             ):
                 prebuf_waits += 1
