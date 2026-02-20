@@ -68,6 +68,14 @@ def _env_str(name: str, default: str) -> str:
     return raw or default
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = (os.getenv(name) or "").strip()
+    try:
+        return float(raw)
+    except Exception:
+        return default
+
+
 def _sanitize_transcript_for_event(transcript: str, max_chars: int = 500) -> str:
     cleaned = " ".join(transcript.split()).strip()
     if not cleaned:
@@ -402,6 +410,8 @@ async def _twilio_sender_loop(
     """Send frames to Twilio at ~20ms pacing. Prefer main lane, then aux."""
     stats_every_s = max(0.25, _env_int("VOICE_TWILIO_STATS_EVERY_MS", 1000) / 1000.0)
     prebuffer_frames = max(0, _env_int("VOICE_TWILIO_PREBUFFER_FRAMES", 6))
+    stall_warn_ms = max(20.0, _env_float("VOICE_SEND_STALL_WARN_MS", 35.0))
+    stall_crit_ms = max(stall_warn_ms + 5.0, _env_float("VOICE_SEND_STALL_CRIT_MS", 60.0))
     stats_started = time.monotonic()
     frames_sent = 0
     underruns = 0
@@ -409,11 +419,12 @@ async def _twilio_sender_loop(
     prebuf_waits = 0
     late_ms_max = 0.0
     idle_late_ms_max = 0.0
-    send_stall_20ms_count = 0
-    send_stall_40ms_count = 0
+    send_stall_warn_count = 0
+    send_stall_crit_count = 0
     send_gap_ms_max = 0.0
     next_due = time.monotonic() + FRAME_SLEEP_S
     last_send_ts: float | None = None
+    last_send_rid: str | None = None
     prebuf_complete_logged_for_rid: str | None = None
     prebuf_open_for_rid: str | None = None
 
@@ -436,6 +447,8 @@ async def _twilio_sender_loop(
                 and len(buffers.main) < prebuffer_frames
             ):
                 prebuf_waits += 1
+                last_send_ts = None
+                last_send_rid = None
                 now = time.monotonic()
                 if now >= next_due:
                     idle_late_ms_max = max(idle_late_ms_max, (now - next_due) * 1000.0)
@@ -448,8 +461,8 @@ async def _twilio_sender_loop(
                         f"prebuf_waits={prebuf_waits} late_ms_max={late_ms_max:.1f} prebuf={prebuf}"
                         f" idle_late_ms_max={idle_late_ms_max:.1f} "
                         f"send_gap_ms_max={send_gap_ms_max:.1f} "
-                        f"send_stall_20ms_count={send_stall_20ms_count} "
-                        f"send_stall_40ms_count={send_stall_40ms_count}"
+                        f"send_stall_warn_count={send_stall_warn_count} "
+                        f"send_stall_crit_count={send_stall_crit_count}"
                     )
                     stats_started = now
                     frames_sent = 0
@@ -458,8 +471,8 @@ async def _twilio_sender_loop(
                     prebuf_waits = 0
                     late_ms_max = 0.0
                     idle_late_ms_max = 0.0
-                    send_stall_20ms_count = 0
-                    send_stall_40ms_count = 0
+                    send_stall_warn_count = 0
+                    send_stall_crit_count = 0
                     send_gap_ms_max = 0.0
                 await asyncio.sleep(0.01)
                 continue
@@ -469,6 +482,8 @@ async def _twilio_sender_loop(
             frame = buffers.aux.popleft()
             lane = "aux"
         else:
+            last_send_ts = None
+            last_send_rid = None
             if _is_sender_underrun_state(response_state=response_state, buffers=buffers):
                 underruns += 1
             else:
@@ -486,8 +501,8 @@ async def _twilio_sender_loop(
                     f"late_ms_max={late_ms_max:.1f} prebuf={prebuf} "
                     f"idle_late_ms_max={idle_late_ms_max:.1f} "
                     f"send_gap_ms_max={send_gap_ms_max:.1f} "
-                    f"send_stall_20ms_count={send_stall_20ms_count} "
-                    f"send_stall_40ms_count={send_stall_40ms_count}"
+                    f"send_stall_warn_count={send_stall_warn_count} "
+                    f"send_stall_crit_count={send_stall_crit_count}"
                 )
                 stats_started = now
                 frames_sent = 0
@@ -496,8 +511,8 @@ async def _twilio_sender_loop(
                 prebuf_waits = 0
                 late_ms_max = 0.0
                 idle_late_ms_max = 0.0
-                send_stall_20ms_count = 0
-                send_stall_40ms_count = 0
+                send_stall_warn_count = 0
+                send_stall_crit_count = 0
                 send_gap_ms_max = 0.0
             await asyncio.sleep(0.01)
             continue
@@ -505,20 +520,29 @@ async def _twilio_sender_loop(
         now = time.monotonic()
         if now >= next_due:
             late_ms_max = max(late_ms_max, (now - next_due) * 1000.0)
-        if isinstance(last_send_ts, float):
+        rid_for_send = response_state.get("active_response_id") if lane == "main" else None
+        if isinstance(last_send_ts, float) and isinstance(rid_for_send, str) and rid_for_send == last_send_rid:
             send_gap_ms = (now - last_send_ts) * 1000.0
             send_gap_ms_max = max(send_gap_ms_max, send_gap_ms)
-            if send_gap_ms > 20.0:
-                send_stall_20ms_count += 1
-            if send_gap_ms > 40.0:
-                send_stall_40ms_count += 1
+            if send_gap_ms > stall_warn_ms:
+                send_stall_warn_count += 1
+            if send_gap_ms > stall_crit_ms:
+                send_stall_crit_count += 1
+        elif lane != "main":
+            last_send_ts = None
+            last_send_rid = None
 
         # Send immediately, then sleep to pace.
         msg = _build_twilio_media_msg(sid, frame)
         async with send_lock:
             await websocket.send_text(json.dumps(msg))
         frames_sent += 1
-        last_send_ts = now
+        if isinstance(rid_for_send, str):
+            last_send_ts = now
+            last_send_rid = rid_for_send
+        else:
+            last_send_ts = None
+            last_send_rid = None
 
         if lane == "main":
             rid = response_state.get("active_response_id")
@@ -544,8 +568,8 @@ async def _twilio_sender_loop(
                 f"late_ms_max={late_ms_max:.1f} prebuf={prebuf} "
                 f"idle_late_ms_max={idle_late_ms_max:.1f} "
                 f"send_gap_ms_max={send_gap_ms_max:.1f} "
-                f"send_stall_20ms_count={send_stall_20ms_count} "
-                f"send_stall_40ms_count={send_stall_40ms_count}"
+                f"send_stall_warn_count={send_stall_warn_count} "
+                f"send_stall_crit_count={send_stall_crit_count}"
             )
             stats_started = now
             frames_sent = 0
@@ -554,8 +578,8 @@ async def _twilio_sender_loop(
             prebuf_waits = 0
             late_ms_max = 0.0
             idle_late_ms_max = 0.0
-            send_stall_20ms_count = 0
-            send_stall_40ms_count = 0
+            send_stall_warn_count = 0
+            send_stall_crit_count = 0
             send_gap_ms_max = 0.0
 
         next_due = now + FRAME_SLEEP_S

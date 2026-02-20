@@ -104,11 +104,14 @@ Interpretation hints:
 - `late_ms_max` spikes (especially >100ms) indicate sender pacing drift or event-loop contention.
 - `prebuf=True` means buffering gate is active; prolonged prebuffer can feel like delayed speech start.
 - `qsize` (heartbeat input queue) growth suggests upstream ingestion pressure.
+- `send_stall_warn_count` / `send_stall_crit_count` track inter-send gaps only during active response playback.
 
 Env knobs (all are env vars):
 - `VOICE_TWILIO_STATS_EVERY_MS` (default `1000`)
 - `VOICE_TWILIO_PREBUFFER_FRAMES` (default `6`)
 - `VOICE_SPEECH_CTRL_HEARTBEAT_MS` (default `2000`)
+- `VOICE_SEND_STALL_WARN_MS` (default `35`)
+- `VOICE_SEND_STALL_CRIT_MS` (default `60`)
 
 Safety:
 - All diagnostics are gated behind `VOZLIA_DEBUG=1`.
