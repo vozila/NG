@@ -186,7 +186,7 @@ def _minimal_hot_path_enabled() -> bool:
 
 
 def _twilio_chunk_mode_enabled() -> bool:
-    return (os.getenv("VOICE_TWILIO_CHUNK_MODE") or "0").strip().lower() in (
+    return (os.getenv("VOICE_TWILIO_CHUNK_MODE") or "1").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -649,6 +649,42 @@ async def _twilio_sender_loop(
             if buffers.main:
                 lane = "main"
                 rid_for_send = response_state.get("active_response_id")
+                rid = rid_for_send if isinstance(rid_for_send, str) else None
+                done_ids = response_state.get("processed_response_done_ids")
+                playout_started_ids = response_state.get("playout_started_ids")
+                refill_wait_started_by_id = response_state.get("refill_wait_started_by_id")
+                rid_done = isinstance(done_ids, set) and isinstance(rid, str) and rid in done_ids
+                if isinstance(rid, str) and rid and isinstance(playout_started_ids, set):
+                    # Startup runway: chunk mode must honor the same startup guard as frame mode.
+                    if rid not in playout_started_ids and not rid_done and len(buffers.main) < playout_start_frames:
+                        prebuf_waits += 1
+                        last_send_ts = None
+                        last_send_rid = None
+                        await asyncio.sleep(0.01)
+                        continue
+                    if rid not in playout_started_ids:
+                        playout_started_ids.add(rid)
+                    # Mid-turn refill hysteresis: hold briefly if queue dipped too low.
+                    if (
+                        not rid_done
+                        and len(buffers.main) < playout_low_water_frames
+                        and isinstance(refill_wait_started_by_id, dict)
+                        and playout_refill_hold_s > 0.0
+                    ):
+                        now = time.monotonic()
+                        started = refill_wait_started_by_id.get(rid)
+                        if not isinstance(started, float):
+                            refill_wait_started_by_id[rid] = now
+                            prebuf_waits += 1
+                            await asyncio.sleep(0.01)
+                            continue
+                        if (now - started) < playout_refill_hold_s:
+                            prebuf_waits += 1
+                            await asyncio.sleep(0.01)
+                            continue
+                        refill_wait_started_by_id.pop(rid, None)
+                    elif isinstance(refill_wait_started_by_id, dict):
+                        refill_wait_started_by_id.pop(rid, None)
                 n = min(chunk_frames, len(buffers.main))
                 for _ in range(n):
                     chunk_parts.append(buffers.main.popleft())
@@ -663,6 +699,19 @@ async def _twilio_sender_loop(
                 continue
 
             chunk_bytes = b"".join(chunk_parts)
+            now = time.monotonic()
+            if now >= next_due:
+                late_ms_max = max(late_ms_max, (now - next_due) * 1000.0)
+            if isinstance(last_send_ts, float) and isinstance(rid_for_send, str) and rid_for_send == last_send_rid:
+                send_gap_ms = (now - last_send_ts) * 1000.0
+                send_gap_ms_max = max(send_gap_ms_max, send_gap_ms)
+                if send_gap_ms > stall_warn_ms:
+                    send_stall_warn_count += 1
+                if send_gap_ms > stall_crit_ms:
+                    send_stall_crit_count += 1
+            elif lane != "main":
+                last_send_ts = None
+                last_send_rid = None
             msg = _build_twilio_media_msg(sid, chunk_bytes)
             async with send_lock:
                 await websocket.send_text(json.dumps(msg))
@@ -677,6 +726,56 @@ async def _twilio_sender_loop(
                 if isinstance(sent_map, dict):
                     cur = sent_map.get(rid_for_send, 0)
                     sent_map[rid_for_send] = int(cur) + len(chunk_parts)
+                last_send_ts = now
+                last_send_rid = rid_for_send
+                if prebuf_open_for_rid != rid_for_send:
+                    prebuf_open_for_rid = rid_for_send
+                if rid_for_send != prebuf_complete_logged_for_rid and len(buffers.main) >= prebuffer_frames:
+                    _dbg("Prebuffer complete; starting to send audio to Twilio")
+                    prebuf_complete_logged_for_rid = rid_for_send
+                logged_main_ids = response_state.get("logged_twilio_main_frame_ids")
+                if isinstance(logged_main_ids, set) and rid_for_send not in logged_main_ids:
+                    _dbg(
+                        f"TWILIO_MAIN_FRAME_SENT first=1 response_id={rid_for_send} "
+                        f"bytes={len(chunk_bytes)} q_main={len(buffers.main)}"
+                    )
+                    logged_main_ids.add(rid_for_send)
+            else:
+                last_send_ts = None
+                last_send_rid = None
+
+            frames_sent += len(chunk_parts)
+            if now - stats_started >= stats_every_s:
+                if stats_log_enabled:
+                    prebuf = bool(response_state.get("active_response_id")) and len(buffers.main) < prebuffer_frames
+                    _dbg(
+                        f"twilio_send stats: q_bytes={_audio_queue_bytes(buffers)} "
+                        f"frames_sent={frames_sent} underruns={underruns} idle_ticks={idle_ticks} "
+                        f"prebuf_waits={prebuf_waits} "
+                        f"late_ms_max={late_ms_max:.1f} prebuf={prebuf} "
+                        f"idle_late_ms_max={idle_late_ms_max:.1f} "
+                        f"send_gap_ms_max={send_gap_ms_max:.1f} "
+                        f"send_stall_warn_count={send_stall_warn_count} "
+                        f"send_stall_crit_count={send_stall_crit_count}"
+                    )
+                stats_started = now
+                frames_sent = 0
+                underruns = 0
+                idle_ticks = 0
+                prebuf_waits = 0
+                late_ms_max = 0.0
+                idle_late_ms_max = 0.0
+                send_stall_warn_count = 0
+                send_stall_crit_count = 0
+                send_gap_ms_max = 0.0
+
+            # Chunk mode still uses a stable 20ms/frame playout clock.
+            next_due = next_due + (FRAME_SLEEP_S * len(chunk_parts))
+            sleep_s = next_due - time.monotonic()
+            if sleep_s > 0:
+                await asyncio.sleep(sleep_s)
+            else:
+                next_due = time.monotonic() + FRAME_SLEEP_S
             continue
 
         if minimal_hot_path:

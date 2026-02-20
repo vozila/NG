@@ -1,6 +1,6 @@
 # CHECKPOINT (rolling) — Vozlia NG
 
-**Updated:** 2026-02-19 (America/New_York)
+**Updated:** 2026-02-20 (America/New_York)
 
 ## Current state
 - Access code routing deterministically selects `ai_mode` (`customer|owner`) and propagates it to Flow A.
@@ -17,6 +17,8 @@
 - Owner inbox endpoints are available behind gates (`VOZ_FEATURE_OWNER_INBOX`, `VOZ_OWNER_INBOX_ENABLED`).
 - Postcall SMS notifier is available behind gates (`VOZ_FEATURE_POSTCALL_NOTIFY_SMS`, `VOZ_POSTCALL_NOTIFY_SMS_ENABLED`).
 - Flow A now includes debug-gated realtime diagnostics for queue/pacing health and speech controller visibility.
+- Active 3-agent bundle model is now defined in `ops/AGENT_BUNDLES.md` (Bundle B001).
+- New execution tasks created: `TASK-0401`, `TASK-0402`, `TASK-0403`.
 
 ## Last known good
 - Flow A OpenAI Realtime bridge: audio deltas received + Twilio μ-law frames sent + caller hears speech.
@@ -36,6 +38,9 @@
   - reconcile honors bounded concurrency (`VOZ_POSTCALL_RECONCILE_CONCURRENCY`) without unbounded fan-out
 
 ## Next actions
+- Land chunk-mode pacing parity fix and validate against real call logs (`TASK-0401`).
+- Harden log tooling workflow and keep runbook/docs aligned (`TASK-0402`).
+- Keep 3-agent assignment/status/memory-spine sync current each bundle cycle (`TASK-0403`).
 - Add/verify feature gating via `VOZ_FEATURE_<NAME>_AI_MODES`.
 - Build owner analytics views on top of durable `flow_a.*` and `postcall.*` facts.
 - Roll out caller metadata contract consumers across owner automations (inbox/notify workflows).

@@ -257,6 +257,8 @@ def test_build_twilio_mark_msg() -> None:
 
 def test_twilio_chunk_mode_env(monkeypatch) -> None:
     monkeypatch.delenv("VOICE_TWILIO_CHUNK_MODE", raising=False)
+    assert _twilio_chunk_mode_enabled() is True
+    monkeypatch.setenv("VOICE_TWILIO_CHUNK_MODE", "0")
     assert _twilio_chunk_mode_enabled() is False
     monkeypatch.setenv("VOICE_TWILIO_CHUNK_MODE", "1")
     assert _twilio_chunk_mode_enabled() is True

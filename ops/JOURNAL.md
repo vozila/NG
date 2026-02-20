@@ -207,3 +207,44 @@ Proof (<=5):
 - `python -m compileall .` ✅
 - `uvx ruff check .` ✅
 - `pytest -q` ✅ (`23 passed`)
+
+## 2026-02-20 — Bundle B001 kickoff + chunk-mode pacing parity fix
+
+What changed:
+- Remediated Flow A chunk-mode sender regression:
+  - chunk mode now honors startup prebuffer/start-buffer and refill-hysteresis guards.
+  - chunk mode now advances the stable playout clock by `20ms * frames_sent_in_chunk`.
+  - kept barge-in clear/cancel path unchanged.
+- Set `VOICE_TWILIO_CHUNK_MODE` default to ON for parity with desired production posture.
+- Added active 3-agent bundle coordination artifacts:
+  - `.agents/tasks/TASK-0401.md`
+  - `.agents/tasks/TASK-0402.md`
+  - `.agents/tasks/TASK-0403.md`
+  - `ops/AGENT_BUNDLES.md`
+  - updated `AGENTS.md` active assignments.
+- Synced `ops/REFERENCE_PACKS/voice_flow_a.md` with chunk-mode defaults and pacing semantics.
+
+Render-log evidence reviewed:
+- `ops/logs/vozlia-ng-20260220T181422Z-4.log`
+- `ops/logs/vozlia-ng-20260220T175205Z-3.log`
+- `ops/logs/vozlia-ng-20260220T174654Z-2.log`
+
+Proof (<=5):
+- `ruff check features/voice_flow_a.py tests/test_voice_flow_a.py scripts/analyze_bargein_latency.py scripts/extract_call_window.py` ✅
+- `python3 -m py_compile features/voice_flow_a.py tests/test_voice_flow_a.py scripts/analyze_bargein_latency.py scripts/extract_call_window.py` ✅
+- `bash -n scripts/capture_render_logs.sh` ✅
+- `.venv/bin/python -m pytest -q tests/test_voice_flow_a.py` ✅ (`38 passed`)
+
+## 2026-02-20 — WebUI planning pack from existing portal review
+
+What changed:
+- Reviewed existing portal implementation in `../vozlia-admin` to reuse proven patterns:
+  - Next.js panelized admin layout
+  - API proxy route pattern (`pages/api/*`)
+  - server-side env-based backend routing.
+- Added WebUI planning docs:
+  - `ops/WEBUI_MVP_SPEC.md`
+  - `ops/WEBUI_TASK_BUNDLES.md`
+
+Outcome:
+- WebUI work is now specified as a separate repo flow with bundle gates and integration checks against NG backend.

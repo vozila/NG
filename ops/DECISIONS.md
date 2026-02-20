@@ -80,3 +80,26 @@ Decision:
 Implications:
 - Downstream owner automations (inbox/notifications) can resolve caller context deterministically from durable events.
 - This remains additive/backward-compatible payload evolution with no DB schema migration.
+
+## 2026-02-20 — Flow A chunk mode defaults ON, but must retain frame-equivalent pacing semantics
+
+Decision:
+- `VOICE_TWILIO_CHUNK_MODE` default is ON.
+- Chunk aggregation is allowed for transport efficiency, but sender behavior must stay equivalent to frame-mode safety:
+  - honor startup prebuffer/start-buffer gates
+  - honor refill hysteresis
+  - keep stable playout clock at 20ms/frame equivalent timing.
+
+Implications:
+- Chunk mode must not bypass hot-path pacing controls.
+- Any future chunk optimizations require parity verification against startup clipping/garble signatures in Render logs.
+
+## 2026-02-20 — Operate with always-on 3-agent bundles
+
+Decision:
+- Run three concurrent agents continuously using explicit bundle files and non-overlapping file ownership.
+- Active bundle definitions live in `ops/AGENT_BUNDLES.md`; active assignment mirror lives in `AGENTS.md`.
+
+Implications:
+- Every active task must exist in `.agents/tasks/` with scope/checks/log-evidence sections.
+- Agents must review `ops/logs/*` for expected event signatures whenever behavior-sensitive changes are made.

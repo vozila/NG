@@ -25,6 +25,8 @@
 - Twilio media frame size target: 160 bytes (20ms at 8kHz μ-law).
 - Chunk decoded bytes into exact 160-byte frames.
 - Queue and send frames at pacing interval (~20ms/frame) to avoid burst/jitter artifacts.
+- Chunk mode may aggregate multiple 20ms frames per Twilio media message, but sender pacing must still advance by `20ms * frames_in_chunk`.
+- Chunk mode startup must honor the same prebuffer/start-buffer guards as frame mode.
 
 ## 4) Failure signatures and fixes
 ### A) Modalities validation failure
@@ -108,7 +110,9 @@ Interpretation hints:
 
 Env knobs (all are env vars):
 - `VOICE_TWILIO_STATS_EVERY_MS` (default `1000`)
-- `VOICE_TWILIO_PREBUFFER_FRAMES` (default `6`)
+- `VOICE_TWILIO_PREBUFFER_FRAMES` (default `80`, clamped to queue size and minimum safe floor)
+- `VOICE_TWILIO_CHUNK_MODE` (default `1`)
+- `VOICE_TWILIO_CHUNK_MS` (default `120`)
 - `VOICE_SPEECH_CTRL_HEARTBEAT_MS` (default `2000`)
 - `VOICE_SEND_STALL_WARN_MS` (default `35`)
 - `VOICE_SEND_STALL_CRIT_MS` (default `60`)

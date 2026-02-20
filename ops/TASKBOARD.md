@@ -1,5 +1,5 @@
 # Vozlia NG — TASKBOARD
-**Date:** 2026-02-19 (America/New_York)
+**Date:** 2026-02-20 (America/New_York)
 
 ## DONE
 - [x] Day 0 Milestone: NG skeleton + loader + registry + admin_quality + sample + scripts + gates green
@@ -81,6 +81,18 @@
         - `speech_ctrl_ACTIVE_DONE ...`
 
 ## NOW (next high-leverage work)
+- [ ] TASK-0401 — Flow A chunk-mode pacing parity (hot path safety)
+      - Keep `VOICE_TWILIO_CHUNK_MODE` default ON without startup clipping regressions
+      - Enforce startup prebuffer/start-buffer and refill-hysteresis in chunk mode
+      - Preserve stable pacing equivalent to 20ms/frame
+- [ ] TASK-0402 — Render log tooling hardening + operator workflow docs
+      - Capture rotation/retry reliability
+      - Barge-in latency analysis and per-call extraction workflows
+      - Reference-pack sync for current chunk/pacing behavior
+- [ ] TASK-0403 — 3-agent bundle orchestration (ops memory spine sync)
+      - Active bundle policy with non-overlapping file ownership
+      - Required checks + log-review protocol per agent
+      - Assignment and status discipline across `.agents/tasks/*`
 - [ ] TASK-0207 — Mode-aware capability gating (MVP env-only; **fail closed**)
       - Per-feature allowlist: `VOZ_FEATURE_<NAME>_AI_MODES="customer,owner"` (or single)
       - Owner-only features/skills must reject customer mode deterministically
