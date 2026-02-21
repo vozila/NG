@@ -13,7 +13,12 @@ def _set_env(monkeypatch, *, db_path: str) -> None:
     monkeypatch.setenv("VOZ_FEATURE_POSTCALL_NOTIFY_EMAIL", "1")
     monkeypatch.setenv("VOZ_POSTCALL_NOTIFY_EMAIL_ENABLED", "1")
     monkeypatch.setenv("VOZ_ADMIN_API_KEY", "admin-secret")
-    monkeypatch.setenv("VOZ_NOTIFY_EMAIL_WEBHOOK_URL", "https://example.test/webhook")
+    monkeypatch.setenv("VOZ_NOTIFY_EMAIL_PROVIDER", "ses_smtp")
+    monkeypatch.setenv("VOZ_SES_SMTP_HOST", "email-smtp.us-east-1.amazonaws.com")
+    monkeypatch.setenv("VOZ_SES_SMTP_PORT", "587")
+    monkeypatch.setenv("VOZ_SES_SMTP_USERNAME", "smtp-user")
+    monkeypatch.setenv("VOZ_SES_SMTP_PASSWORD", "smtp-pass")
+    monkeypatch.setenv("VOZ_NOTIFY_EMAIL_FROM", "no-reply@example.com")
     monkeypatch.setenv("VOZ_TENANT_OWNER_NOTIFY_JSON", '{"tenant_demo":{"email":"owner@example.com"}}')
 
 
@@ -88,4 +93,3 @@ def test_postcall_notify_email_limit_cap(monkeypatch, tmp_path) -> None:
         json={"tenant_id": "tenant_demo", "since_ts": int(time.time()) - 60, "limit": 201},
     )
     assert resp.status_code == 422
-

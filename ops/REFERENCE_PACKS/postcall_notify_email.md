@@ -8,6 +8,7 @@ Feature gate: `VOZ_FEATURE_POSTCALL_NOTIFY_EMAIL=1`
 Runtime gate: `VOZ_POSTCALL_NOTIFY_EMAIL_ENABLED=1`
 
 Admin out-of-band notifier that turns new post-call lead/appt artifacts into owner email notifications.
+Default provider mode is Amazon SES SMTP.
 
 ## Endpoint
 - `POST /admin/postcall/notify/email`
@@ -30,7 +31,8 @@ Admin out-of-band notifier that turns new post-call lead/appt artifacts into own
    - returns plan
    - writes no notify events
 6. Non-dry run:
-   - sends to webhook (`VOZ_NOTIFY_EMAIL_WEBHOOK_URL`)
+   - sends email via provider selected by `VOZ_NOTIFY_EMAIL_PROVIDER`
+   - default: `ses_smtp`
    - writes:
      - `notify.email_sent` (idempotency `notify_email:{rid}`)
      - `notify.email_failed` on provider failure
@@ -40,9 +42,17 @@ Admin out-of-band notifier that turns new post-call lead/appt artifacts into own
 - `VOZ_ADMIN_API_KEY`
 - `VOZ_TENANT_OWNER_NOTIFY_JSON` format includes email:
   - `{"tenant_demo":{"email":"owner@example.com"}}`
-- `VOZ_NOTIFY_EMAIL_WEBHOOK_URL` (non-dry run only)
+- Provider selector:
+  - `VOZ_NOTIFY_EMAIL_PROVIDER=ses_smtp` (default) or `webhook`
+- SES SMTP mode (`ses_smtp`) required vars:
+  - `VOZ_SES_SMTP_HOST` (example `email-smtp.us-east-1.amazonaws.com`)
+  - `VOZ_SES_SMTP_PORT` (example `587`)
+  - `VOZ_SES_SMTP_USERNAME`
+  - `VOZ_SES_SMTP_PASSWORD`
+  - `VOZ_NOTIFY_EMAIL_FROM` (verified SES sender)
+- Webhook mode (`webhook`) required var:
+  - `VOZ_NOTIFY_EMAIL_WEBHOOK_URL`
 
 ## Rollback
 - Runtime off: `VOZ_POSTCALL_NOTIFY_EMAIL_ENABLED=0`
 - Feature off: `VOZ_FEATURE_POSTCALL_NOTIFY_EMAIL=0`
-

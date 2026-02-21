@@ -30,6 +30,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
+from urllib import request as urllib_request
 from urllib.parse import quote_plus
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -317,6 +318,51 @@ def _customer_sms_followup_enabled() -> bool:
     )
 
 
+def _intent_nlu_enabled() -> bool:
+    return (os.getenv("VOICE_INTENT_NLU_ENABLED") or "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _intent_nlu_actions_enabled() -> bool:
+    return (os.getenv("VOICE_INTENT_NLU_ACTIONS_ENABLED") or "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _intent_nlu_shadow_mode() -> bool:
+    return (os.getenv("VOICE_INTENT_NLU_SHADOW_MODE") or "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _intent_nlu_confidence_min() -> float:
+    return max(0.0, min(1.0, _env_float("VOICE_INTENT_NLU_CONFIDENCE_MIN", 0.7)))
+
+
+def _intent_nlu_model() -> str:
+    return _env_str("VOICE_INTENT_NLU_MODEL", "gpt-4o-mini")
+
+
+def _intent_nlu_timeout_s() -> float:
+    return max(0.2, _env_float("VOICE_INTENT_NLU_TIMEOUT_S", 2.0))
+
+
+def _intent_confidence_clamp(v: Any) -> float:
+    if isinstance(v, (int, float)):
+        return max(0.0, min(1.0, float(v)))
+    return 0.0
+
+
 def _detect_transcript_intents(transcript: str) -> dict[str, bool]:
     txt = " ".join((transcript or "").lower().split())
     callback_terms = (
@@ -345,6 +391,133 @@ def _detect_transcript_intents(transcript: str) -> dict[str, bool]:
         "appointment": any(term in txt for term in appointment_terms),
         "talk_to_owner": any(term in txt for term in talk_owner_terms),
     }
+
+
+def _normalize_nlu_intent_result(raw: Any) -> dict[str, dict[str, Any]] | None:
+    intents = ("callback", "appointment", "talk_to_owner")
+    if not isinstance(raw, dict):
+        return None
+    out: dict[str, dict[str, Any]] = {}
+    for name in intents:
+        node = raw.get(name)
+        if isinstance(node, dict):
+            detected = bool(node.get("detected"))
+            confidence = _intent_confidence_clamp(node.get("confidence"))
+        else:
+            detected = bool(node)
+            confidence = 1.0 if detected else 0.0
+        out[name] = {"detected": detected, "confidence": confidence}
+    return out
+
+
+def _classify_transcript_intents_nlu_sync(transcript: str) -> dict[str, dict[str, Any]] | None:
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        return None
+
+    payload = {
+        "model": _intent_nlu_model(),
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "Classify caller transcript intents. Return strict JSON object with keys "
+                    "callback, appointment, talk_to_owner. Each value must be an object with "
+                    "detected(boolean) and confidence(number 0..1)."
+                ),
+            },
+            {"role": "user", "content": transcript},
+        ],
+    }
+    req = urllib_request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib_request.urlopen(req, timeout=_intent_nlu_timeout_s()) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    msg = choices[0].get("message") if isinstance(choices[0], dict) else None
+    content = msg.get("content") if isinstance(msg, dict) else None
+    if not isinstance(content, str) or not content.strip():
+        return None
+    try:
+        parsed = json.loads(content)
+    except Exception:
+        return None
+    return _normalize_nlu_intent_result(parsed)
+
+
+async def _classify_transcript_intents_nlu(transcript: str) -> dict[str, dict[str, Any]] | None:
+    try:
+        return await asyncio.to_thread(_classify_transcript_intents_nlu_sync, transcript)
+    except Exception:
+        return None
+
+
+def _resolve_intent_decisions(
+    *,
+    heuristic_intents: dict[str, bool],
+    nlu_intents: dict[str, dict[str, Any]] | None,
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any] | None]:
+    names = ("callback", "appointment", "talk_to_owner")
+    decisions: dict[str, dict[str, Any]] = {}
+    shadow_compare: dict[str, Any] | None = None
+    nlu_enabled = _intent_nlu_enabled()
+    actions_enabled = _intent_nlu_actions_enabled()
+    shadow_mode = _intent_nlu_shadow_mode()
+    conf_min = _intent_nlu_confidence_min()
+
+    if nlu_enabled and nlu_intents is not None and shadow_mode:
+        shadow_compare = {
+            "heuristic": {k: bool(heuristic_intents.get(k)) for k in names},
+            "nlu": {
+                k: {
+                    "detected": bool((nlu_intents.get(k) or {}).get("detected")),
+                    "confidence": _intent_confidence_clamp((nlu_intents.get(k) or {}).get("confidence")),
+                }
+                for k in names
+            },
+        }
+
+    for name in names:
+        heur = bool(heuristic_intents.get(name))
+        nlu_node = (nlu_intents or {}).get(name) if isinstance(nlu_intents, dict) else None
+        nlu_det = bool(nlu_node.get("detected")) if isinstance(nlu_node, dict) else False
+        nlu_conf = _intent_confidence_clamp(nlu_node.get("confidence")) if isinstance(nlu_node, dict) else 0.0
+
+        # Shadow mode keeps existing heuristic actions while collecting NLU parity.
+        if nlu_enabled and shadow_mode and not actions_enabled:
+            decisions[name] = {
+                "detected": heur,
+                "source": "heuristic",
+                "confidence": 0.51 if heur else 0.0,
+            }
+            continue
+
+        if nlu_enabled and actions_enabled and nlu_det and nlu_conf >= conf_min:
+            decisions[name] = {
+                "detected": True,
+                "source": "nlu",
+                "confidence": nlu_conf,
+            }
+            continue
+
+        decisions[name] = {
+            "detected": heur,
+            "source": "heuristic",
+            "confidence": 0.51 if heur else 0.0,
+        }
+
+    return decisions, shadow_compare
 
 
 def _resolve_customer_knowledge_context(*, custom_parameters: dict[str, Any]) -> dict[str, str | None]:
@@ -1460,10 +1633,39 @@ async def twilio_stream(websocket: WebSocket) -> None:
                         "transcript": _sanitize_transcript_for_event(transcript),
                     },
                 )
-                intents = _detect_transcript_intents(transcript)
+                heuristic_intents = _detect_transcript_intents(transcript)
+                nlu_intents: dict[str, dict[str, Any]] | None = None
+                if _intent_nlu_enabled():
+                    nlu_intents = await _classify_transcript_intents_nlu(transcript)
+                intents, shadow_compare = _resolve_intent_decisions(
+                    heuristic_intents=heuristic_intents,
+                    nlu_intents=nlu_intents,
+                )
                 sanitized = _sanitize_transcript_for_event(transcript)
+                if isinstance(shadow_compare, dict):
+                    _dbg(
+                        "INTENT_SHADOW_COMPARE "
+                        f"heuristic={shadow_compare.get('heuristic')} "
+                        f"nlu={shadow_compare.get('nlu')}"
+                    )
+                    await _emit_flow_a_event(
+                        enabled=event_emit_enabled,
+                        tenant_id=call_tenant_id,
+                        rid=call_rid,
+                        event_type="flow_a.intent_shadow_compare",
+                        payload={
+                            "tenant_id": call_tenant_id,
+                            "rid": call_rid,
+                            "ai_mode": call_ai_mode,
+                            "tenant_mode": call_tenant_mode,
+                            "turn": turn_seq,
+                            "heuristic": shadow_compare.get("heuristic"),
+                            "nlu": shadow_compare.get("nlu"),
+                        },
+                        idempotency_key=f"{call_rid}:intent_shadow_compare:{turn_seq}" if call_rid else None,
+                    )
 
-                if intents.get("callback") and "callback" not in emitted_intent_event_keys:
+                if bool((intents.get("callback") or {}).get("detected")) and "callback" not in emitted_intent_event_keys:
                     emitted_intent_event_keys.add("callback")
                     await _emit_flow_a_event(
                         enabled=event_emit_enabled,
@@ -1478,10 +1680,15 @@ async def twilio_stream(websocket: WebSocket) -> None:
                             "turn": turn_seq,
                             "transcript": sanitized,
                             "from_number": call_from_number,
+                            "intent_source": (intents.get("callback") or {}).get("source"),
+                            "intent_confidence": (intents.get("callback") or {}).get("confidence"),
                         },
                         idempotency_key=f"{call_rid}:intent_callback" if call_rid else None,
                     )
-                if intents.get("appointment") and "appointment" not in emitted_intent_event_keys:
+                if (
+                    bool((intents.get("appointment") or {}).get("detected"))
+                    and "appointment" not in emitted_intent_event_keys
+                ):
                     emitted_intent_event_keys.add("appointment")
                     await _emit_flow_a_event(
                         enabled=event_emit_enabled,
@@ -1495,10 +1702,15 @@ async def twilio_stream(websocket: WebSocket) -> None:
                             "tenant_mode": call_tenant_mode,
                             "turn": turn_seq,
                             "transcript": sanitized,
+                            "intent_source": (intents.get("appointment") or {}).get("source"),
+                            "intent_confidence": (intents.get("appointment") or {}).get("confidence"),
                         },
                         idempotency_key=f"{call_rid}:intent_appointment" if call_rid else None,
                     )
-                if intents.get("talk_to_owner") and "talk_to_owner" not in emitted_intent_event_keys:
+                if (
+                    bool((intents.get("talk_to_owner") or {}).get("detected"))
+                    and "talk_to_owner" not in emitted_intent_event_keys
+                ):
                     emitted_intent_event_keys.add("talk_to_owner")
                     await _emit_flow_a_event(
                         enabled=event_emit_enabled,
@@ -1512,11 +1724,13 @@ async def twilio_stream(websocket: WebSocket) -> None:
                             "tenant_mode": call_tenant_mode,
                             "turn": turn_seq,
                             "transcript": sanitized,
+                            "intent_source": (intents.get("talk_to_owner") or {}).get("source"),
+                            "intent_confidence": (intents.get("talk_to_owner") or {}).get("confidence"),
                         },
                         idempotency_key=f"{call_rid}:intent_talk_to_owner" if call_rid else None,
                     )
                 if (
-                    intents.get("callback")
+                    bool((intents.get("callback") or {}).get("detected"))
                     and _customer_sms_followup_enabled()
                     and "sms_followup_requested" not in emitted_intent_event_keys
                 ):
@@ -1533,6 +1747,8 @@ async def twilio_stream(websocket: WebSocket) -> None:
                             "tenant_mode": call_tenant_mode,
                             "turn": turn_seq,
                             "to_number": call_from_number,
+                            "intent_source": (intents.get("callback") or {}).get("source"),
+                            "intent_confidence": (intents.get("callback") or {}).get("confidence"),
                         },
                         idempotency_key=f"{call_rid}:sms_followup_requested" if call_rid else None,
                     )

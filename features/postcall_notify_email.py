@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import json
 import os
+import smtplib
 import time
 import urllib.error
 import urllib.request
+from email.message import EmailMessage
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException
@@ -148,25 +150,72 @@ def _notify_email_webhook() -> str:
     return url
 
 
-def _send_email(*, to_email: str, subject: str, body: str) -> tuple[bool, str]:
-    url = _notify_email_webhook()
-    payload = json.dumps({"to": to_email, "subject": subject, "body": body}).encode("utf-8")
-    req = urllib.request.Request(
-        url=url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+def _email_provider() -> str:
+    provider = (os.getenv("VOZ_NOTIFY_EMAIL_PROVIDER") or "ses_smtp").strip().lower()
+    if provider not in {"ses_smtp", "webhook"}:
+        raise RuntimeError(f"unsupported VOZ_NOTIFY_EMAIL_PROVIDER: {provider}")
+    return provider
+
+
+def _ses_smtp_config() -> tuple[str, int, str, str, str]:
+    host = (os.getenv("VOZ_SES_SMTP_HOST") or "").strip()
+    port_raw = (os.getenv("VOZ_SES_SMTP_PORT") or "587").strip()
+    username = (os.getenv("VOZ_SES_SMTP_USERNAME") or "").strip()
+    password = (os.getenv("VOZ_SES_SMTP_PASSWORD") or "").strip()
+    from_email = (os.getenv("VOZ_NOTIFY_EMAIL_FROM") or "").strip()
+    if not host or not username or not password or not from_email:
+        raise RuntimeError("SES SMTP config missing")
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            detail = resp.read().decode("utf-8")
-            return True, detail
-    except urllib.error.HTTPError as exc:
+        port = int(port_raw)
+    except ValueError as exc:
+        raise RuntimeError("VOZ_SES_SMTP_PORT must be integer") from exc
+    return host, port, username, password, from_email
+
+
+def _ensure_provider_ready() -> None:
+    provider = _email_provider()
+    if provider == "webhook":
+        _notify_email_webhook()
+        return
+    _ses_smtp_config()
+
+
+def _send_email(*, to_email: str, subject: str, body: str) -> tuple[bool, str]:
+    provider = _email_provider()
+    if provider == "webhook":
+        url = _notify_email_webhook()
+        payload = json.dumps({"to": to_email, "subject": subject, "body": body}).encode("utf-8")
+        req = urllib.request.Request(
+            url=url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
         try:
-            return False, exc.read().decode("utf-8")
-        except Exception:
-            return False, str(exc)
-    except Exception as exc:  # pragma: no cover - defensive path
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                detail = resp.read().decode("utf-8")
+                return True, detail
+        except urllib.error.HTTPError as exc:
+            try:
+                return False, exc.read().decode("utf-8")
+            except Exception:
+                return False, str(exc)
+        except Exception as exc:  # pragma: no cover - defensive path
+            return False, repr(exc)
+
+    host, port, username, password, from_email = _ses_smtp_config()
+    msg = EmailMessage()
+    msg["From"] = from_email
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.set_content(body)
+    try:
+        with smtplib.SMTP(host=host, port=port, timeout=10) as smtp:
+            smtp.starttls()
+            smtp.login(username, password)
+            smtp.send_message(msg)
+        return True, "ses_smtp_sent"
+    except Exception as exc:  # pragma: no cover - network/provider path
         return False, repr(exc)
 
 
@@ -184,7 +233,7 @@ async def postcall_notify_email(
 
     if not body.dry_run:
         try:
-            _notify_email_webhook()
+            _ensure_provider_ready()
         except Exception as exc:
             raise HTTPException(status_code=503, detail=f"email provider unavailable: {exc}") from exc
 
@@ -315,4 +364,3 @@ FEATURE = {
     "security_checks": security_checks,
     "load_profile": load_profile,
 }
-

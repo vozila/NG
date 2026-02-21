@@ -33,6 +33,7 @@ from features.voice_flow_a import (
     _playout_refill_hold_s,
     _playout_start_frames,
     _resolve_customer_knowledge_context,
+    _resolve_intent_decisions,
     _resolve_actor_mode_policy,
     _sanitize_transcript_for_event,
     _should_accept_response_audio,
@@ -502,6 +503,71 @@ def test_customer_sms_followup_enabled_env(monkeypatch) -> None:
     assert _customer_sms_followup_enabled() is False
     monkeypatch.setenv("VOICE_CUSTOMER_SMS_FOLLOWUP_ENABLED", "1")
     assert _customer_sms_followup_enabled() is True
+
+
+def test_resolve_intent_decisions_shadow_mode_keeps_heuristic_actions(monkeypatch) -> None:
+    monkeypatch.setenv("VOICE_INTENT_NLU_ENABLED", "1")
+    monkeypatch.setenv("VOICE_INTENT_NLU_SHADOW_MODE", "1")
+    monkeypatch.setenv("VOICE_INTENT_NLU_ACTIONS_ENABLED", "0")
+
+    decisions, shadow = _resolve_intent_decisions(
+        heuristic_intents={"callback": True, "appointment": False, "talk_to_owner": False},
+        nlu_intents={
+            "callback": {"detected": False, "confidence": 0.2},
+            "appointment": {"detected": True, "confidence": 0.95},
+            "talk_to_owner": {"detected": True, "confidence": 0.88},
+        },
+    )
+    assert decisions["callback"]["detected"] is True
+    assert decisions["callback"]["source"] == "heuristic"
+    assert decisions["appointment"]["detected"] is False
+    assert decisions["talk_to_owner"]["detected"] is False
+    assert isinstance(shadow, dict)
+    assert shadow["heuristic"]["callback"] is True
+    assert shadow["nlu"]["appointment"]["detected"] is True
+
+
+def test_resolve_intent_decisions_actions_enabled_uses_nlu_above_threshold(monkeypatch) -> None:
+    monkeypatch.setenv("VOICE_INTENT_NLU_ENABLED", "1")
+    monkeypatch.setenv("VOICE_INTENT_NLU_SHADOW_MODE", "0")
+    monkeypatch.setenv("VOICE_INTENT_NLU_ACTIONS_ENABLED", "1")
+    monkeypatch.setenv("VOICE_INTENT_NLU_CONFIDENCE_MIN", "0.75")
+
+    decisions, shadow = _resolve_intent_decisions(
+        heuristic_intents={"callback": False, "appointment": False, "talk_to_owner": False},
+        nlu_intents={
+            "callback": {"detected": True, "confidence": 0.91},
+            "appointment": {"detected": False, "confidence": 0.1},
+            "talk_to_owner": {"detected": False, "confidence": 0.2},
+        },
+    )
+    assert decisions["callback"]["detected"] is True
+    assert decisions["callback"]["source"] == "nlu"
+    assert decisions["callback"]["confidence"] == 0.91
+    assert shadow is None
+
+
+def test_resolve_intent_decisions_actions_enabled_falls_back_to_heuristics_when_nlu_low_conf(monkeypatch) -> None:
+    monkeypatch.setenv("VOICE_INTENT_NLU_ENABLED", "1")
+    monkeypatch.setenv("VOICE_INTENT_NLU_SHADOW_MODE", "0")
+    monkeypatch.setenv("VOICE_INTENT_NLU_ACTIONS_ENABLED", "1")
+    monkeypatch.setenv("VOICE_INTENT_NLU_CONFIDENCE_MIN", "0.90")
+
+    decisions, shadow = _resolve_intent_decisions(
+        heuristic_intents={"callback": True, "appointment": False, "talk_to_owner": True},
+        nlu_intents={
+            "callback": {"detected": True, "confidence": 0.6},
+            "appointment": {"detected": True, "confidence": 0.95},
+            "talk_to_owner": {"detected": False, "confidence": 0.3},
+        },
+    )
+    assert decisions["callback"]["detected"] is True
+    assert decisions["callback"]["source"] == "heuristic"
+    assert decisions["appointment"]["detected"] is True
+    assert decisions["appointment"]["source"] == "nlu"
+    assert decisions["talk_to_owner"]["detected"] is True
+    assert decisions["talk_to_owner"]["source"] == "heuristic"
+    assert shadow is None
 
 
 def test_emit_flow_a_event_kill_switch_off_makes_no_db_calls(monkeypatch) -> None:
