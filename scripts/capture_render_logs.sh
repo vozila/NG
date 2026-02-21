@@ -73,7 +73,10 @@ prune_old_files() {
   if (( count <= MAX_FILES )); then
     return
   fi
-  mapfile -t files < <(ls -1t "${OUT_DIR}/${LOG_PREFIX}-"*.log)
+  files=()
+  while IFS= read -r f; do
+    files+=( "${f}" )
+  done < <(ls -1t "${OUT_DIR}/${LOG_PREFIX}-"*.log)
   local i
   for ((i = MAX_FILES; i < ${#files[@]}; i++)); do
     rm -f "${files[$i]}"

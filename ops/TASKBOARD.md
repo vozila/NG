@@ -89,37 +89,39 @@
       - Assignment/status sync completed across AGENTS + ops memory spine.
       - Consistency and log-reference verification captured in `.agents/tasks/TASK-0403.md`.
 - [x] Bundle B003 — Agent C (portal UI slices) delivery captured
-      - Portal repo only (`../vozlia-admin`): inbox actions + notification settings + appointment requests UI paths delivered.
+      - Portal repo only (`apps/vozlia-admin`): inbox actions + notification settings + appointment requests UI paths delivered.
       - Verification command outputs captured with required sections:
         - `Verification Commands`
         - `Expected Output Signatures`
         - `Render Env Changes Required`
       - Runtime/live checks are operator-run due auth/session + backend dependency.
+- [x] Bundle B004 — Agent B (goals/playbooks/scheduler backend)
+      - Added `wizard_goals` lifecycle persistence feature (`/owner/goals` endpoints).
+      - Added schema-validated playbook wizard draft feature (`/owner/playbooks/wizard/draft`).
+      - Added admin scheduler tick runner (`/admin/scheduler/tick`) with deterministic dry-run and idempotent execution marker writes.
+      - Added reference packs: `wizard_goals.md`, `playbooks.md`, `scheduler_tick.md`.
 
 ## NOW (next high-leverage work)
-- [ ] TASK-0207 — Mode-aware capability gating (MVP env-only; **fail closed**)
-      - Per-feature allowlist: `VOZ_FEATURE_<NAME>_AI_MODES="customer,owner"` (or single)
-      - Owner-only features/skills must reject customer mode deterministically
-      - Default behavior for unknown modes: treat as `customer`
-- [ ] TASK-0205 — Owner-mode analytics foundations (owner-only)
-      - QuerySpec schema (strict JSON) + deterministic executor (SQL/DB reads only)
-      - Must not run in Flow A hot path; consume facts via owner events read API
-- [ ] TASK-0206 — Customer-mode capabilities (MVP)
-      - Customer greeting + customer protocols
-      - Lead capture / appointment request capture (domain stubs acceptable)
-      - Notifications (SMS/email) behind feature flags
-- [ ] Flow A: refine barge-in / clear semantics (anti-regression)
-      - Ensure `TWILIO_CLEAR_SENT` only on actual `speech_started`
-      - Add deterministic tests for: (a) user interrupts mid-response, (b) silence/noise edge cases
-- [ ] Bundle B003 closeout (operator-run evidence consolidation)
-      - Run portal API smoke checks with authenticated session cookie.
-      - Attach command outputs to `ops/JOURNAL.md`.
-      - Confirm backend owner inbox endpoints + flags in deployed environment.
+- [ ] Bundle B005 — Intent/auth hardening
+      - Agent A: `TASK-0260`, `TASK-0261`, `TASK-0262`
+      - Agent B: `TASK-0263`, `TASK-0264`, `TASK-0265`
+      - Agent C: `TASK-0266`, `TASK-0267`, `TASK-0268`
+- [ ] Bundle B006 — Customer vertical workflows
+      - Agent A: `TASK-0270`, `TASK-0271`, `TASK-0272`
+      - Agent B: `TASK-0273`, `TASK-0274`, `TASK-0275`
+      - Agent C: `TASK-0276`, `TASK-0277`, `TASK-0278`
+- [ ] Bundle B007 — Agentic analytics + dynamic skills
+      - Agent A: `TASK-0280`, `TASK-0281`, `TASK-0282`
+      - Agent B: `TASK-0283`, `TASK-0284`, `TASK-0285`
+      - Agent C: `TASK-0286`, `TASK-0287`, `TASK-0288`
+- [ ] Bundle B008 — Runtime/release hardening
+      - Agent A: `TASK-0290`, `TASK-0291`, `TASK-0292`
+      - Agent B: `TASK-0293`, `TASK-0294`, `TASK-0295`
+      - Agent C: `TASK-0296`, `TASK-0297`, `TASK-0298`
 
 ## NEXT (blocked / staged)
-- [ ] Unified engine router interface (shared across voice/whatsapp/portal)
-- [ ] Portal chat goal wizard (VOZ-PRD-GOALS-001) — out-of-band planning + deterministic playbooks
-- [ ] Capacity Agent load profiles against staging (never prod by default)
+- [ ] Unified engine router interface (shared across voice/whatsapp/portal) after B005-B008 proof gates.
+- [ ] Multi-tenant production onboarding automation after quality workers are green.
 
 ## Guardrails (do not break)
 - No cross-feature imports.

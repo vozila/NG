@@ -1,6 +1,6 @@
 # Agent Bundles (3-At-All-Times)
 
-**Updated:** 2026-02-20 (America/New_York)
+**Updated:** 2026-02-21 (America/New_York)
 
 ## Bundle B001 (Executed 2026-02-20)
 
@@ -77,3 +77,43 @@ Command:
 - For API/backend tasks, verification must include at least one curl against the changed endpoint(s).
 - For persistence/event tasks, verification must include DB evidence (query endpoint or sqlite/sql check).
 - If the agent cannot run a check, it must provide `OPERATOR-RUN` commands and expected signatures.
+
+## Bundle B005 (Ready)
+
+Command:
+- `bash scripts/agent_bundle_workflow.sh execute B005`
+
+Focus:
+- Intent/NLU hardening off hot path
+- Owner/auth/event API hardening
+- Portal auth/tenant guardrails
+
+## Bundle B006 (Ready)
+
+Command:
+- `bash scripts/agent_bundle_workflow.sh execute B006`
+
+Focus:
+- Customer vertical flows (restaurant orders + barber appointments)
+- Deterministic backend modules + idempotent notifications
+- Portal order/appointment operations UI
+
+## Bundle B007 (Ready)
+
+Command:
+- `bash scripts/agent_bundle_workflow.sh execute B007`
+
+Focus:
+- Owner analytics voice handoff
+- Dynamic skill engine (DB + web/api adapters behind flags)
+- Portal skill studio and run controls
+
+## Bundle B008 (Ready)
+
+Command:
+- `bash scripts/agent_bundle_workflow.sh execute B008`
+
+Focus:
+- Voice runtime hardening (barge-in + fragmented speech tuning)
+- Quality workers (regression/security/capacity) and report outputs
+- Portal release checks + operator runbooks

@@ -309,6 +309,15 @@ def _talk_to_owner_baseline_instructions() -> str:
     return (os.getenv("VOZ_FLOW_A_TALK_TO_OWNER_BASELINE") or "").strip() or default
 
 
+def _owner_goal_voice_baseline_instructions() -> str:
+    default = (
+        "Owner goal voice baseline:\n"
+        "- If owner asks to list goals, provide a short readout (max 3 concise items) then ask what to do next.\n"
+        "- If owner asks to pause/resume a goal, confirm the specific goal identifier before execution."
+    )
+    return (os.getenv("VOZ_FLOW_A_OWNER_GOAL_BASELINE") or "").strip() or default
+
+
 def _customer_sms_followup_enabled() -> bool:
     return (os.getenv("VOICE_CUSTOMER_SMS_FOLLOWUP_ENABLED") or "0").strip().lower() in (
         "1",
@@ -564,6 +573,59 @@ def _resolve_customer_knowledge_context(*, custom_parameters: dict[str, Any]) ->
     }
 
 
+def _extract_goal_ref(transcript: str) -> str | None:
+    txt = " ".join((transcript or "").split())
+    if not txt:
+        return None
+    import re
+
+    m = re.search(r"\bgoal\s*#?\s*(\d+)\b", txt, flags=re.IGNORECASE)
+    if m:
+        return f"goal {m.group(1)}"
+    m = re.search(r"\bgoal\s+([a-z0-9_-]{2,24})\b", txt, flags=re.IGNORECASE)
+    if m:
+        return f"goal {m.group(1)}"
+    return None
+
+
+def _extract_goal_intake_text(transcript: str) -> str | None:
+    txt = " ".join((transcript or "").split())
+    if not txt:
+        return None
+    import re
+
+    patterns = (
+        r"\bnew goal\b[:\-]?\s*(.+)$",
+        r"\badd goal\b[:\-]?\s*(.+)$",
+        r"\bcreate goal\b[:\-]?\s*(.+)$",
+        r"\bset goal\b[:\-]?\s*(.+)$",
+    )
+    for p in patterns:
+        m = re.search(p, txt, flags=re.IGNORECASE)
+        if m:
+            val = m.group(1).strip(" .")
+            if val:
+                return val[:240]
+    return None
+
+
+def _detect_owner_goal_actions(transcript: str) -> dict[str, Any]:
+    txt = " ".join((transcript or "").lower().split())
+    list_terms = ("list goals", "show goals", "read goals", "what are my goals")
+    pause_terms = ("pause goal", "pause this goal", "pause my goal")
+    resume_terms = ("resume goal", "resume this goal", "resume my goal")
+    intake_terms = ("new goal", "add goal", "create goal", "set goal")
+
+    return {
+        "goal_list": any(term in txt for term in list_terms),
+        "goal_pause": any(term in txt for term in pause_terms),
+        "goal_resume": any(term in txt for term in resume_terms),
+        "goal_intake": any(term in txt for term in intake_terms),
+        "goal_ref": _extract_goal_ref(transcript),
+        "goal_text": _extract_goal_intake_text(transcript),
+    }
+
+
 def _build_customer_instructions(
     *,
     base_instructions: str | None,
@@ -603,6 +665,17 @@ def _build_customer_instructions(
     if context_lines:
         blocks.append("Knowledge context:\n" + "\n".join(context_lines))
 
+    return "\n\n".join(blocks).strip()
+
+
+def _build_owner_instructions(*, base_instructions: str | None, mode_instructions: str | None) -> str:
+    blocks: list[str] = []
+    primary = (mode_instructions or base_instructions or "").strip()
+    if primary:
+        blocks.append(primary)
+    owner_goal = _owner_goal_voice_baseline_instructions().strip()
+    if owner_goal:
+        blocks.append(owner_goal)
     return "\n\n".join(blocks).strip()
 
 
@@ -1387,6 +1460,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
     event_emit_enabled = _event_emit_enabled()
     call_stopped_emitted = False
     emitted_intent_event_keys: set[str] = set()
+    emitted_owner_goal_event_keys: set[str] = set()
     last_speech_started_ts: float | None = None
     pending_speech_started_at: float | None = None
     pending_speech_started_media_frames: int | None = None
@@ -1752,6 +1826,92 @@ async def twilio_stream(websocket: WebSocket) -> None:
                         },
                         idempotency_key=f"{call_rid}:sms_followup_requested" if call_rid else None,
                     )
+                if call_ai_mode == "owner":
+                    owner_actions = _detect_owner_goal_actions(transcript)
+                    if bool(owner_actions.get("goal_intake")):
+                        goal_text = owner_actions.get("goal_text")
+                        intake_key = f"goal_intake:{goal_text or 'unknown'}"
+                        if intake_key not in emitted_owner_goal_event_keys:
+                            emitted_owner_goal_event_keys.add(intake_key)
+                            await _emit_flow_a_event(
+                                enabled=event_emit_enabled,
+                                tenant_id=call_tenant_id,
+                                rid=call_rid,
+                                event_type="flow_a.owner_goal_intake_requested",
+                                payload={
+                                    "tenant_id": call_tenant_id,
+                                    "rid": call_rid,
+                                    "ai_mode": call_ai_mode,
+                                    "tenant_mode": call_tenant_mode,
+                                    "turn": turn_seq,
+                                    "goal_text": goal_text,
+                                    "transcript": sanitized,
+                                },
+                                idempotency_key=f"{call_rid}:owner_goal_intake:{goal_text or 'unknown'}"
+                                if call_rid
+                                else None,
+                            )
+                    if bool(owner_actions.get("goal_list")) and "goal_list" not in emitted_owner_goal_event_keys:
+                        emitted_owner_goal_event_keys.add("goal_list")
+                        await _emit_flow_a_event(
+                            enabled=event_emit_enabled,
+                            tenant_id=call_tenant_id,
+                            rid=call_rid,
+                            event_type="flow_a.owner_goal_list_requested",
+                            payload={
+                                "tenant_id": call_tenant_id,
+                                "rid": call_rid,
+                                "ai_mode": call_ai_mode,
+                                "tenant_mode": call_tenant_mode,
+                                "turn": turn_seq,
+                                "readout_style": "short",
+                            },
+                            idempotency_key=f"{call_rid}:owner_goal_list" if call_rid else None,
+                        )
+                    if bool(owner_actions.get("goal_pause")):
+                        goal_ref = owner_actions.get("goal_ref")
+                        pause_key = f"goal_pause:{goal_ref or 'unknown'}"
+                        if pause_key not in emitted_owner_goal_event_keys:
+                            emitted_owner_goal_event_keys.add(pause_key)
+                            await _emit_flow_a_event(
+                                enabled=event_emit_enabled,
+                                tenant_id=call_tenant_id,
+                                rid=call_rid,
+                                event_type="flow_a.owner_goal_pause_requested",
+                                payload={
+                                    "tenant_id": call_tenant_id,
+                                    "rid": call_rid,
+                                    "ai_mode": call_ai_mode,
+                                    "tenant_mode": call_tenant_mode,
+                                    "turn": turn_seq,
+                                    "goal_ref": goal_ref,
+                                },
+                                idempotency_key=f"{call_rid}:owner_goal_pause:{goal_ref or 'unknown'}"
+                                if call_rid
+                                else None,
+                            )
+                    if bool(owner_actions.get("goal_resume")):
+                        goal_ref = owner_actions.get("goal_ref")
+                        resume_key = f"goal_resume:{goal_ref or 'unknown'}"
+                        if resume_key not in emitted_owner_goal_event_keys:
+                            emitted_owner_goal_event_keys.add(resume_key)
+                            await _emit_flow_a_event(
+                                enabled=event_emit_enabled,
+                                tenant_id=call_tenant_id,
+                                rid=call_rid,
+                                event_type="flow_a.owner_goal_resume_requested",
+                                payload={
+                                    "tenant_id": call_tenant_id,
+                                    "rid": call_rid,
+                                    "ai_mode": call_ai_mode,
+                                    "tenant_mode": call_tenant_mode,
+                                    "turn": turn_seq,
+                                    "goal_ref": goal_ref,
+                                },
+                                idempotency_key=f"{call_rid}:owner_goal_resume:{goal_ref or 'unknown'}"
+                                if call_rid
+                                else None,
+                            )
 
                 if active_response_id is not None:
                     continue
@@ -2120,6 +2280,11 @@ async def twilio_stream(websocket: WebSocket) -> None:
                         base_instructions=instructions,
                         mode_instructions=mode_instructions,
                         knowledge_context=knowledge_context,
+                    )
+                elif ai_mode == "owner":
+                    instructions = _build_owner_instructions(
+                        base_instructions=instructions,
+                        mode_instructions=mode_instructions,
                     )
                 elif mode_instructions:
                     instructions = mode_instructions

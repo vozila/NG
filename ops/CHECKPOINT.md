@@ -1,6 +1,6 @@
 # CHECKPOINT (rolling) — Vozlia NG
 
-**Updated:** 2026-02-20 (America/New_York)
+**Updated:** 2026-02-21 (America/New_York)
 
 ## Current state
 - Access code routing deterministically selects `ai_mode` (`customer|owner`) and propagates it to Flow A.
@@ -24,6 +24,13 @@
   - `TASK-0403`: DONE
 - Required task evidence now includes checks run plus concrete render-log references in each active bundle task file.
 - Bundle B003 Agent C portal delivery is recorded with mandatory verification sections; live endpoint checks remain operator-run due session/auth dependency.
+- Bundle B004 is marked complete; next execution line is Bundles B005-B008 (task files and workflow script are now pre-wired).
+- WebUI monorepo migration completed: portal codebase is now available at `apps/vozlia-admin` inside NG.
+- True cutover executed: legacy standalone path `/Users/yasirmccarroll/Downloads/repo/vozlia-admin` removed.
+- Added monorepo WebUI runner: `scripts/run_webui.sh` (`dev|build|lint|test`).
+- Resolved Agent C bundle blocker conditions in `apps/vozlia-admin`:
+  - `npm run lint` now passes.
+  - `npm test` now exists and passes (`lint + tsc --noEmit`).
 
 ## Last known good
 - Flow A OpenAI Realtime bridge: audio deltas received + Twilio μ-law frames sent + caller hears speech.
@@ -43,11 +50,17 @@
   - reconcile honors bounded concurrency (`VOZ_POSTCALL_RECONCILE_CONCURRENCY`) without unbounded fan-out
 
 ## Next actions
-- Open next 3-agent bundle cycle and assign next three non-overlapping tasks.
+- Install and run WebUI from monorepo path:
+  - `bash scripts/run_webui.sh dev`
+- Set local WebUI auth/control env vars:
+  - `NEXTAUTH_URL`, `NEXTAUTH_SECRET`, `VOZLIA_CONTROL_BASE_URL`, `VOZLIA_ADMIN_KEY`
+- Execute Bundle B005:
+  - `bash scripts/agent_bundle_workflow.sh execute B005`
+- Execute Bundle B006:
+  - `bash scripts/agent_bundle_workflow.sh execute B006`
+- Execute Bundle B007:
+  - `bash scripts/agent_bundle_workflow.sh execute B007`
+- Execute Bundle B008:
+  - `bash scripts/agent_bundle_workflow.sh execute B008`
 - Close Bundle B003 by running operator-side portal/API verification commands and logging outputs.
-- Add/verify feature gating via `VOZ_FEATURE_<NAME>_AI_MODES`.
-- Build owner analytics views on top of durable `flow_a.*` and `postcall.*` facts.
-- Roll out caller metadata contract consumers across owner automations (inbox/notify workflows).
-- Validate owner inbox UI integration against normalized `/owner/inbox/*` endpoints.
-- Stage SMS notifier rollout (`dry_run` first, then enable live sends per tenant mapping).
-- Capture and baseline realtime diag thresholds (`underruns`, `late_ms_max`) during controlled call tests.
+- Enforce proof-gate closeout after each bundle (`ops/BUNDLE_PROOF_GATES.md` + `scripts/bundle_gate_checklist.sh <BUNDLE_ID>`).

@@ -5,7 +5,7 @@ set -euo pipefail
 #
 # Purpose: Pull latest changes from GitHub for every git repo under a parent folder.
 #          Designed for a "repo-of-repos" workspace like:
-#            repo/adminUI, repo/NG, repo/vozlia-admin, ...
+#            repo/adminUI, repo/NG, ... (webui now lives in NG/apps/vozlia-admin)
 #
 # Safe defaults:
 #   - Skips dirty repos (unless --stash or --hard)

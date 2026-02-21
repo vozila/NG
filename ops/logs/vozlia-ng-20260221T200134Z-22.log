@@ -1,0 +1,8 @@
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-21T20:01:29Z end=2026-02-21T20:01:33Z
+Error: error listing logs: received response code 500: internal server error
+  render logs [flags]
+capture_render_logs: backoff sleep_s=6 consecutive_failures=1
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-21T20:01:29Z end=2026-02-21T20:01:40Z
+Error: error listing logs: received response code 500: internal server error
+  render logs [flags]
+capture_render_logs: backoff sleep_s=12 consecutive_failures=2

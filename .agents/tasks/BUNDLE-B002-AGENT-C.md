@@ -12,7 +12,7 @@
 
 ## File scope (exclusive)
 - Portal/front-end repo files only.
-- Default portal repo path: `../vozlia-admin`
+- Default portal repo path: `apps/vozlia-admin`
 - Do not edit NG backend files for this task.
 - No backend/voice/ops files in NG backend repo.
 

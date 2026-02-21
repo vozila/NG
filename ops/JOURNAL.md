@@ -238,7 +238,7 @@ Proof (<=5):
 ## 2026-02-20 — WebUI planning pack from existing portal review
 
 What changed:
-- Reviewed existing portal implementation in `../vozlia-admin` to reuse proven patterns:
+- Reviewed existing portal implementation in `apps/vozlia-admin` to reuse proven patterns:
   - Next.js panelized admin layout
   - API proxy route pattern (`pages/api/*`)
   - server-side env-based backend routing.
@@ -259,10 +259,91 @@ What changed:
   - `ops/CHECKPOINT.md`
   - `ops/AGENT_BUNDLES.md`
 
+## 2026-02-21 — Post-B004 continuation plan wired (B005-B008)
+
+What changed:
+- Added new bundle instruction files for continuous 3-agent execution:
+  - `.agents/tasks/BUNDLE-B005-AGENT-{A,B,C}.md`
+  - `.agents/tasks/BUNDLE-B006-AGENT-{A,B,C}.md`
+  - `.agents/tasks/BUNDLE-B007-AGENT-{A,B,C}.md`
+  - `.agents/tasks/BUNDLE-B008-AGENT-{A,B,C}.md`
+- Updated bundle runner to support new bundle IDs:
+  - `scripts/agent_bundle_workflow.sh` now supports `B005`, `B006`, `B007`, `B008`.
+- Synced ops memory spine:
+  - `ops/AGENT_BUNDLES.md`
+  - `ops/TASKBOARD.md`
+  - `ops/CHECKPOINT.md`
+
+Proof (<=5):
+- `bash scripts/agent_bundle_workflow.sh files B005` ✅
+- `bash scripts/agent_bundle_workflow.sh files B006` ✅
+- `bash scripts/agent_bundle_workflow.sh files B007` ✅
+- `bash scripts/agent_bundle_workflow.sh files B008` ✅
+- `bash -n scripts/agent_bundle_workflow.sh` ✅
+
+## 2026-02-21 — WebUI moved into NG monorepo
+
+What changed:
+- Imported portal code from sibling repo into:
+  - `apps/vozlia-admin`
+- Excluded local/runtime artifacts from import:
+  - `.git`, `node_modules`, `.next`, `.env.local`, `tsconfig.tsbuildinfo`
+- Updated bundle/task/docs references from `../vozlia-admin` to `apps/vozlia-admin` where relevant.
+- Extended root `.gitignore` to ignore Next.js artifacts under `apps/vozlia-admin`.
+- Updated run instructions in `README.md` and checkpoint/context docs.
+
+Proof (<=5):
+- `ls apps/vozlia-admin` shows portal sources under NG ✅
+- `rg -n "../vozlia-admin|apps/vozlia-admin" ops .agents README.md -S` updated references ✅
+- `.gitignore` contains webui artifact ignores for `apps/vozlia-admin` ✅
+
+## 2026-02-21 — WebUI true cutover completed
+
+What changed:
+- Removed legacy standalone portal directory:
+  - `/Users/yasirmccarroll/Downloads/repo/vozlia-admin`
+- Confirmed NG monorepo path remains canonical:
+  - `apps/vozlia-admin`
+
+Proof (<=5):
+- `test -d /Users/yasirmccarroll/Downloads/repo/vozlia-admin; echo $?` -> `1` ✅
+- `ls apps/vozlia-admin` shows expected portal files ✅
+
+## 2026-02-21 — Added one-command WebUI runner
+
+What changed:
+- Added `scripts/run_webui.sh` to run portal commands from NG root.
+- Supported modes:
+  - `dev` (default)
+  - `lint`
+  - `build`
+  - `test`
+- Script auto-installs dependencies once if missing (`apps/vozlia-admin/node_modules` absent).
+- Updated `README.md` and `ops/CHECKPOINT.md` to use root-level command.
+
+Proof (<=5):
+- `bash -n scripts/run_webui.sh` ✅
+- `bash scripts/run_webui.sh --help` ✅
+
+## 2026-02-21 — Agent C blocker remediation (lint/test) in monorepo webui
+
+What changed:
+- Fixed lint violations in:
+  - `apps/vozlia-admin/components/AgentLongTermMemoryTable.tsx`
+  - `apps/vozlia-admin/components/KBTurnConsolePanel.tsx`
+- Added missing `test` script in:
+  - `apps/vozlia-admin/package.json`
+  - `test` now runs `npm run lint && npx tsc --noEmit`.
+
+Proof (<=5):
+- `cd apps/vozlia-admin && npm run lint` ✅
+- `cd apps/vozlia-admin && npx tsc --noEmit` ✅
+- `cd apps/vozlia-admin && npm test` ✅
+
 ## 2026-02-20 — Bundle B003 Agent C verification capture (portal repo)
 
 What changed:
-- Captured Bundle B003 Agent C verification output for portal-only scope (`../vozlia-admin`), with mandatory sections:
+- Captured Bundle B003 Agent C verification output for portal-only scope (`apps/vozlia-admin`), with mandatory sections:
   - `Verification Commands`
   - `Expected Output Signatures`
   - `Render Env Changes Required`
@@ -270,10 +351,10 @@ What changed:
 - Confirmed no NG backend/ops code edits were made by Agent C.
 
 Verification command results:
-- `cd ../vozlia-admin && npm run lint` -> exit `1` (pre-existing unrelated lint debt).
-- `cd ../vozlia-admin && npx tsc --noEmit` -> exit `0`.
-- `cd ../vozlia-admin && npm run build` -> exit `0`.
-- `cd ../vozlia-admin && npm test` -> exit `1` (no `test` script in `package.json`).
+- `cd apps/vozlia-admin && npm run lint` -> exit `1` (pre-existing unrelated lint debt).
+- `cd apps/vozlia-admin && npx tsc --noEmit` -> exit `0`.
+- `cd apps/vozlia-admin && npm run build` -> exit `0`.
+- `cd apps/vozlia-admin && npm test` -> exit `1` (no `test` script in `package.json`).
 - `cd NG && bash scripts/bundle_gate_checklist.sh B003` -> exit `0`.
 
 OPERATOR-RUN pending:

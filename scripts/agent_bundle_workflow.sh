@@ -10,6 +10,7 @@ Usage:
 Example:
   bash scripts/agent_bundle_workflow.sh execute B001
   bash scripts/agent_bundle_workflow.sh execute B004
+  bash scripts/agent_bundle_workflow.sh execute B008
 USAGE
 }
 
@@ -44,6 +45,26 @@ files_for_bundle() {
       echo ".agents/tasks/BUNDLE-B004-AGENT-A.md"
       echo ".agents/tasks/BUNDLE-B004-AGENT-B.md"
       echo ".agents/tasks/BUNDLE-B004-AGENT-C.md"
+      ;;
+    B005)
+      echo ".agents/tasks/BUNDLE-B005-AGENT-A.md"
+      echo ".agents/tasks/BUNDLE-B005-AGENT-B.md"
+      echo ".agents/tasks/BUNDLE-B005-AGENT-C.md"
+      ;;
+    B006)
+      echo ".agents/tasks/BUNDLE-B006-AGENT-A.md"
+      echo ".agents/tasks/BUNDLE-B006-AGENT-B.md"
+      echo ".agents/tasks/BUNDLE-B006-AGENT-C.md"
+      ;;
+    B007)
+      echo ".agents/tasks/BUNDLE-B007-AGENT-A.md"
+      echo ".agents/tasks/BUNDLE-B007-AGENT-B.md"
+      echo ".agents/tasks/BUNDLE-B007-AGENT-C.md"
+      ;;
+    B008)
+      echo ".agents/tasks/BUNDLE-B008-AGENT-A.md"
+      echo ".agents/tasks/BUNDLE-B008-AGENT-B.md"
+      echo ".agents/tasks/BUNDLE-B008-AGENT-C.md"
       ;;
     *)
       die "Unknown bundle '${bundle}'."

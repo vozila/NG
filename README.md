@@ -25,3 +25,23 @@ python -m ruff check .
 pytest -q
 VOZ_FEATURE_ADMIN_QUALITY=1 VOZ_FEATURE_SAMPLE=1 python scripts/run_regression.py
 ```
+
+## WebUI (monorepo)
+Web admin UI now lives in `apps/vozlia-admin`.
+
+Local run:
+```bash
+bash scripts/run_webui.sh dev
+```
+
+Other modes:
+```bash
+bash scripts/run_webui.sh lint
+bash scripts/run_webui.sh build
+```
+
+Required local env for auth:
+- `NEXTAUTH_URL=http://localhost:3000`
+- `NEXTAUTH_SECRET=<strong-random-secret>`
+- `VOZLIA_CONTROL_BASE_URL=http://localhost:10000`
+- `VOZLIA_ADMIN_KEY=<admin-key>`

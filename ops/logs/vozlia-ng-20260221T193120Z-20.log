@@ -1,0 +1,113 @@
+2026-02-21 19:31:16  [34m[1m==>(B[m [1mDownloading cache...(B[m
+2026-02-21 19:31:16  [34m[1m==>(B[m [1mCloning from https://github.com/vozila/NG(B[m
+2026-02-21 19:31:17  [34m[1m==>(B[m [1mChecking out commit 7f8194f6a10f15da75688a17aee8d90a5e5eeb41 in branch main(B[m
+2026-02-21 19:31:25  [34m[1m==>(B[m [1mInstalling Python version 3.12.8...(B[m
+2026-02-21 19:31:35  [34m[1m==>(B[m [1mUsing Python version 3.12.8 via environment variable PYTHON_VERSION(B[m
+2026-02-21 19:31:35  [34m[1m==>(B[m [1mDocs on specifying a Python version: https://render.com/docs/python-version(B[m
+2026-02-21 19:31:39  [34m[1m==>(B[m [1mUsing Poetry version 2.1.3 (default)(B[m
+2026-02-21 19:31:39  [34m[1m==>(B[m [1mDocs on specifying a Poetry version: https://render.com/docs/poetry-version(B[m
+2026-02-21 19:31:39  [34m[1m==>(B[m [1mRunning build command 'pip install --upgrade pip && pip install .'...(B[m
+2026-02-21 19:31:40  Requirement already satisfied: pip in ./.venv/lib/python3.12/site-packages (24.3.1)
+2026-02-21 19:31:40  Collecting pip
+2026-02-21 19:31:40    Using cached pip-26.0.1-py3-none-any.whl.metadata (4.7 kB)
+2026-02-21 19:31:40  Using cached pip-26.0.1-py3-none-any.whl (1.8 MB)
+2026-02-21 19:31:40  Installing collected packages: pip
+2026-02-21 19:31:40    Attempting uninstall: pip
+2026-02-21 19:31:40      Found existing installation: pip 24.3.1
+2026-02-21 19:31:40      Uninstalling pip-24.3.1:
+2026-02-21 19:31:40        Successfully uninstalled pip-24.3.1
+2026-02-21 19:31:41  Successfully installed pip-26.0.1
+2026-02-21 19:31:42  Processing ./.
+2026-02-21 19:31:42    Installing build dependencies: started
+2026-02-21 19:31:43    Installing build dependencies: finished with status 'done'
+2026-02-21 19:31:43    Getting requirements to build wheel: started
+2026-02-21 19:31:43    Getting requirements to build wheel: finished with status 'done'
+2026-02-21 19:31:43    Preparing metadata (pyproject.toml): started
+2026-02-21 19:31:43    Preparing metadata (pyproject.toml): finished with status 'done'
+2026-02-21 19:31:44  Collecting fastapi (from vozlia-ng==0.0.0)
+2026-02-21 19:31:44    Downloading fastapi-0.129.2-py3-none-any.whl.metadata (30 kB)
+2026-02-21 19:31:44  Collecting uvicorn[standard] (from vozlia-ng==0.0.0)
+2026-02-21 19:31:44    Using cached uvicorn-0.41.0-py3-none-any.whl.metadata (6.7 kB)
+2026-02-21 19:31:44  Collecting pydantic (from vozlia-ng==0.0.0)
+2026-02-21 19:31:44    Using cached pydantic-2.12.5-py3-none-any.whl.metadata (90 kB)
+2026-02-21 19:31:44  Collecting starlette<1.0.0,>=0.40.0 (from fastapi->vozlia-ng==0.0.0)
+2026-02-21 19:31:44    Using cached starlette-0.52.1-py3-none-any.whl.metadata (6.3 kB)
+2026-02-21 19:31:44  Collecting typing-extensions>=4.8.0 (from fastapi->vozlia-ng==0.0.0)
+2026-02-21 19:31:44    Using cached typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+2026-02-21 19:31:44  Collecting typing-inspection>=0.4.2 (from fastapi->vozlia-ng==0.0.0)
+2026-02-21 19:31:44    Using cached typing_inspection-0.4.2-py3-none-any.whl.metadata (2.6 kB)
+2026-02-21 19:31:44  Collecting annotated-doc>=0.0.2 (from fastapi->vozlia-ng==0.0.0)
+2026-02-21 19:31:44    Using cached annotated_doc-0.0.4-py3-none-any.whl.metadata (6.6 kB)
+2026-02-21 19:31:44  Collecting anyio<5,>=3.6.2 (from starlette<1.0.0,>=0.40.0->fastapi->vozlia-ng==0.0.0)
+2026-02-21 19:31:44    Using cached anyio-4.12.1-py3-none-any.whl.metadata (4.3 kB)
+2026-02-21 19:31:44  Collecting idna>=2.8 (from anyio<5,>=3.6.2->starlette<1.0.0,>=0.40.0->fastapi->vozlia-ng==0.0.0)
+2026-02-21 19:31:44    Using cached idna-3.11-py3-none-any.whl.metadata (8.4 kB)
+2026-02-21 19:31:44  Collecting annotated-types>=0.6.0 (from pydantic->vozlia-ng==0.0.0)
+2026-02-21 19:31:44    Using cached annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
+2026-02-21 19:31:45  Collecting pydantic-core==2.41.5 (from pydantic->vozlia-ng==0.0.0)
+2026-02-21 19:31:45    Using cached pydantic_core-2.41.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (7.3 kB)
+2026-02-21 19:31:45  Collecting click>=7.0 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-21 19:31:45    Using cached click-8.3.1-py3-none-any.whl.metadata (2.6 kB)
+2026-02-21 19:31:45  Collecting h11>=0.8 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-21 19:31:45    Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2026-02-21 19:31:45  Collecting httptools>=0.6.3 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-21 19:31:45    Using cached httptools-0.7.1-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (3.5 kB)
+2026-02-21 19:31:45  Collecting python-dotenv>=0.13 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-21 19:31:45    Using cached python_dotenv-1.2.1-py3-none-any.whl.metadata (25 kB)
+2026-02-21 19:31:45  Collecting pyyaml>=5.1 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-21 19:31:45    Using cached pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+2026-02-21 19:31:45  Collecting uvloop>=0.15.1 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-21 19:31:45    Using cached uvloop-0.22.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (4.9 kB)
+2026-02-21 19:31:45  Collecting watchfiles>=0.20 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-21 19:31:45    Using cached watchfiles-1.1.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
+2026-02-21 19:31:45  Collecting websockets>=10.4 (from uvicorn[standard]->vozlia-ng==0.0.0)
+2026-02-21 19:31:45    Using cached websockets-16.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (6.8 kB)
+2026-02-21 19:31:45  Downloading fastapi-0.129.2-py3-none-any.whl (103 kB)
+2026-02-21 19:31:45  Using cached starlette-0.52.1-py3-none-any.whl (74 kB)
+2026-02-21 19:31:45  Using cached anyio-4.12.1-py3-none-any.whl (113 kB)
+2026-02-21 19:31:45  Using cached annotated_doc-0.0.4-py3-none-any.whl (5.3 kB)
+2026-02-21 19:31:45  Using cached idna-3.11-py3-none-any.whl (71 kB)
+2026-02-21 19:31:45  Using cached pydantic-2.12.5-py3-none-any.whl (463 kB)
+2026-02-21 19:31:45  Using cached pydantic_core-2.41.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+2026-02-21 19:31:45  Using cached annotated_types-0.7.0-py3-none-any.whl (13 kB)
+2026-02-21 19:31:45  Using cached typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+2026-02-21 19:31:45  Using cached typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+2026-02-21 19:31:45  Using cached uvicorn-0.41.0-py3-none-any.whl (68 kB)
+2026-02-21 19:31:45  Using cached click-8.3.1-py3-none-any.whl (108 kB)
+2026-02-21 19:31:45  Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+2026-02-21 19:31:45  Using cached httptools-0.7.1-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (517 kB)
+2026-02-21 19:31:45  Using cached python_dotenv-1.2.1-py3-none-any.whl (21 kB)
+2026-02-21 19:31:45  Using cached pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (807 kB)
+2026-02-21 19:31:45  Using cached uvloop-0.22.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (4.4 MB)
+2026-02-21 19:31:46  Using cached watchfiles-1.1.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (456 kB)
+2026-02-21 19:31:46  Using cached websockets-16.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (184 kB)
+2026-02-21 19:31:46  Building wheels for collected packages: vozlia-ng
+2026-02-21 19:31:46    Building wheel for vozlia-ng (pyproject.toml): started
+2026-02-21 19:31:46    Building wheel for vozlia-ng (pyproject.toml): finished with status 'done'
+2026-02-21 19:31:46    Created wheel for vozlia-ng: filename=vozlia_ng-0.0.0-py3-none-any.whl size=68034 sha256=96769671b4dd95915f0588a5af8bb9bf62fa47d7f6651a9f0052cbd22189630c
+2026-02-21 19:31:46    Stored in directory: /tmp/pip-ephem-wheel-cache-f6nin5fo/wheels/5a/f8/e0/58e42082500d50320d06a4baa628d7286902f98f440588a8e8
+2026-02-21 19:31:46  Successfully built vozlia-ng
+2026-02-21 19:31:46  Installing collected packages: websockets, uvloop, typing-extensions, pyyaml, python-dotenv, idna, httptools, h11, click, annotated-types, annotated-doc, uvicorn, typing-inspection, pydantic-core, anyio, watchfiles, starlette, pydantic, fastapi, vozlia-ng
+2026-02-21 19:31:50  [34;1m==>[0;22m [1mUploading build...[22m
+2026-02-21 19:32:26  [0;34m[1m==> [0m[1mDeploying...[0m
+2026-02-21 19:32:26  [0;34m[1m==> [0m[1mSetting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance[0m
+2026-02-21 19:33:07  [32m[1m==>(B[m [1mRunning 'uvicorn main:app --host 0.0.0.0 --port $PORT'(B[m
+2026-02-21 19:33:08  2026-02-21 19:33:08,807 INFO vozlia_ng FEATURES_DISCOVERED keys=['access_gate', 'admin_quality', 'business_profile', 'business_templates', 'ocr_ingest', 'owner_analytics_query', 'owner_events_api', 'owner_inbox', 'owner_inbox_actions', 'owner_insights', 'postcall_extract', 'postcall_notify_email', 'postcall_notify_sms', 'postcall_reconcile', 'sample', 'shared_line_access', 'voice_flow_a', 'whatsapp_in']
+2026-02-21 19:33:08  2026-02-21 19:33:08,807 INFO vozlia_ng FEATURES_ENABLED keys=['owner_events_api', 'postcall_extract', 'shared_line_access', 'voice_flow_a']
+2026-02-21 19:33:08  INFO:     Started server process [54]
+2026-02-21 19:33:08  INFO:     Waiting for application startup.
+2026-02-21 19:33:08  INFO:     Application startup complete.
+2026-02-21 19:33:08  INFO:     Uvicorn running on http://0.0.0.0:10000 (Press CTRL+C to quit)
+2026-02-21 19:33:09  INFO:     127.0.0.1:50876 - "HEAD / HTTP/1.1" 405 Method Not Allowed
+2026-02-21 19:33:17  [0;32m[1m==> [0m[1mYour service is live 🎉[0m
+2026-02-21 19:33:17  [0;32m[1m==> [0m[1m[0m
+2026-02-21 19:33:17  [0;32m[1m==> [0m[1m///////////////////////////////////////////////////////////[0m
+2026-02-21 19:33:18  clientIP="35.230.45.39" requestID="dad77748-9b84-4687" responseTimeMS=25 responseBytes=223158 userAgent="Go-http-client/2.0"
+2026-02-21 19:33:18  [0;32m[1m==> [0m[1m[0m
+2026-02-21 19:33:18  [0;32m[1m==> [0m[1mAvailable at your primary URL https://vozlia-ng.onrender.com[0m
+2026-02-21 19:33:18  [0;32m[1m==> [0m[1m[0m
+2026-02-21 19:33:18  [0;32m[1m==> [0m[1m///////////////////////////////////////////////////////////[0m
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-21T19:34:45Z end=2026-02-21T19:34:48Z
+Error: error listing logs: received response code 500: internal server error
+  render logs [flags]
+capture_render_logs: backoff sleep_s=6 consecutive_failures=1

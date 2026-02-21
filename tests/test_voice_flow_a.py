@@ -10,12 +10,14 @@ from features.voice_flow_a import (
     _audio_queue_bytes,
     _barge_in_allowed,
     _build_customer_instructions,
+    _build_owner_instructions,
     _build_openai_session_update,
     _build_twilio_clear_msg,
     _build_twilio_mark_msg,
     _chunk_to_frames,
     _customer_sms_followup_enabled,
     _detect_transcript_intents,
+    _detect_owner_goal_actions,
     _diag_init,
     _diag_score,
     _diag_update_frame,
@@ -482,6 +484,16 @@ def test_build_customer_instructions_uses_base_when_mode_missing(monkeypatch) ->
     assert "Knowledge context:" not in out
 
 
+def test_build_owner_instructions_includes_goal_baseline(monkeypatch) -> None:
+    monkeypatch.setenv("VOZ_FLOW_A_OWNER_GOAL_BASELINE", "Keep list-goals short and confirm pause/resume target.")
+    out = _build_owner_instructions(
+        base_instructions="Owner base instructions.",
+        mode_instructions=None,
+    )
+    assert "Owner base instructions." in out
+    assert "Keep list-goals short and confirm pause/resume target." in out
+
+
 def test_detect_transcript_intents_flags_callback_appointment_and_owner() -> None:
     out = _detect_transcript_intents(
         "Can I book an appointment and please have the owner call me back tomorrow?"
@@ -496,6 +508,25 @@ def test_detect_transcript_intents_no_match() -> None:
     assert out["callback"] is False
     assert out["appointment"] is False
     assert out["talk_to_owner"] is False
+
+
+def test_detect_owner_goal_actions_goal_intake_and_text() -> None:
+    out = _detect_owner_goal_actions("Please add goal: increase weekday bookings by 20 percent")
+    assert out["goal_intake"] is True
+    assert out["goal_text"] == "increase weekday bookings by 20 percent"
+
+
+def test_detect_owner_goal_actions_list_pause_resume_and_ref() -> None:
+    list_out = _detect_owner_goal_actions("Can you list goals quickly?")
+    assert list_out["goal_list"] is True
+
+    pause_out = _detect_owner_goal_actions("Pause goal 3 for now")
+    assert pause_out["goal_pause"] is True
+    assert pause_out["goal_ref"] == "goal 3"
+
+    resume_out = _detect_owner_goal_actions("Resume goal #7")
+    assert resume_out["goal_resume"] is True
+    assert resume_out["goal_ref"] == "goal 7"
 
 
 def test_customer_sms_followup_enabled_env(monkeypatch) -> None:

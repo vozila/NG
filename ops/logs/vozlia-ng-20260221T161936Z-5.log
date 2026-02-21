@@ -1,0 +1,11 @@
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-21T16:19:32Z end=2026-02-21T16:19:36Z
+Error: error listing logs: received response code 500: internal server error
+  render logs [flags]
+capture_render_logs: backoff sleep_s=6 consecutive_failures=1
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-21T16:19:52Z end=2026-02-21T16:19:56Z
+Error: error listing logs: received response code 500: internal server error
+  render logs [flags]
+capture_render_logs: backoff sleep_s=6 consecutive_failures=1
+2026-02-21 16:24:28  [34m[1m==>(B[m [1mDownloading cache...(B[m
+2026-02-21 16:24:28  [34m[1m==>(B[m [1mCloning from https://github.com/vozila/NG(B[m
+2026-02-21 16:24:28  [34m[1m==>(B[m [1mChecking out commit 7f8194f6a10f15da75688a17aee8d90a5e5eeb41 in branch main(B[m

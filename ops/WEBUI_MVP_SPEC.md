@@ -1,7 +1,7 @@
 # WebUI MVP Spec (Based on Existing `vozlia-admin`)
 
 **Date:** 2026-02-20  
-**Source reviewed:** `../vozlia-admin` (Next.js 14 + panelized admin UI + API proxy routes)
+**Source reviewed:** `apps/vozlia-admin` (Next.js 14 + panelized admin UI + API proxy routes)
 
 ## 1) Product target
 Build a companion owner portal that is operationally safe and aligned with NG backend:
@@ -12,7 +12,7 @@ Build a companion owner portal that is operationally safe and aligned with NG ba
 - goal wizard + goals status + execution visibility
 
 ## 2) Proven patterns to reuse from existing portal
-From `../vozlia-admin`:
+From `apps/vozlia-admin`:
 - Next.js app shell with panelized components (`components/*`).
 - Server-side API proxy routes (`pages/api/*`) that call control/backend services.
 - Environment-driven backend routing:
