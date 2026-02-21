@@ -1,0 +1,8 @@
+2026-02-21 21:33:22  clientIP="74.101.122.21" requestID="70061585-b505-431a" responseTimeMS=12 responseBytes=273 userAgent="curl/8.7.1"
+2026-02-21 21:34:06  clientIP="74.101.122.21" requestID="fc183057-90dd-49a7" responseTimeMS=471 responseBytes=589 userAgent="curl/8.7.1"
+2026-02-21 21:34:39  [0;32m[1m==> [0m[1mDetected service running on port 10000[0m
+2026-02-21 21:34:39  [0;32m[1m==> [0m[1mDocs on specifying a port: https://render.com/docs/web-services#port-binding[0m
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-21T21:35:33Z end=2026-02-21T21:35:37Z
+Error: error listing logs: received response code 500: internal server error
+  render logs [flags]
+capture_render_logs: backoff sleep_s=6 consecutive_failures=1

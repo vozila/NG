@@ -10,3 +10,4 @@ apps/vozlia-admin/node_modules/
 apps/vozlia-admin/.next/
 apps/vozlia-admin/.env.local
 apps/vozlia-admin/tsconfig.tsbuildinfo
+ops/env/*.env

@@ -11,9 +11,14 @@
 ## Must verify
 - Provide UI flow evidence for goal creation/approval/edit.
 - If direct execution unavailable, provide operator steps and expected outcomes.
+- Run topology/auth preflight first:
+  - verify collapsed NG runtime vs split control-plane
+  - do not assume `/admin/settings` exists on NG runtime
+  - use Bearer auth checks for NG `/owner/*` and `/admin/*` probes
 
 ## Required checks
 - Front-end lint/build/test commands for the UI repo.
+- For any curl verification, first run: `source scripts/load_operator_env.sh`
 
 ## Mandatory Delivery Contract
 - Include a `Verification Commands` section with copy/paste commands actually run (or to run if blocked):

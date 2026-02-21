@@ -340,6 +340,35 @@ Proof (<=5):
 - `cd apps/vozlia-admin && npx tsc --noEmit` ✅
 - `cd apps/vozlia-admin && npm test` ✅
 
+## 2026-02-21 — Standardized operator env-file workflow for agent curl checks
+
+What changed:
+- Added tracked template:
+  - `ops/env/operator.env.example`
+- Added loader script:
+  - `scripts/load_operator_env.sh`
+- Added gitignore rule for real env files:
+  - `ops/env/*.env`
+- Updated bundle docs/contracts so Agent C must source env file before curl verification:
+  - `ops/AGENT_BUNDLES.md`
+  - `ops/BUNDLE_PROOF_GATES.md`
+  - `.agents/tasks/BUNDLE-B003-AGENT-C.md` through `.agents/tasks/BUNDLE-B008-AGENT-C.md`
+
+Proof (<=5):
+- `bash -n scripts/load_operator_env.sh` ✅
+
+## 2026-02-21 — Runtime dependency fix for regression selftests
+
+What changed:
+- Updated `pyproject.toml`:
+  - added `httpx` to `[project].dependencies`
+  - removed `httpx` from `[project.optional-dependencies].dev`
+
+Why:
+- `features/shared_line_access` selftests use `fastapi.testclient.TestClient`.
+- On Render, `admin/quality/regression/run` executes selftests in runtime environment.
+- Without runtime `httpx`, regression status was `fail` despite endpoint/auth being healthy.
+
 ## 2026-02-20 — Bundle B003 Agent C verification capture (portal repo)
 
 What changed:

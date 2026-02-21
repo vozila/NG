@@ -21,6 +21,13 @@ python3 -m compileall .
 ruff check .
 ```
 
+## Env preflight for curl checks (run once per shell)
+```bash
+cp ops/env/operator.env.example ops/env/operator.env   # first time only
+# edit ops/env/operator.env with real values
+source scripts/load_operator_env.sh
+```
+
 If tests are available:
 ```bash
 .venv/bin/python -m pytest -q

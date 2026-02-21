@@ -77,6 +77,21 @@ Command:
 - For API/backend tasks, verification must include at least one curl against the changed endpoint(s).
 - For persistence/event tasks, verification must include DB evidence (query endpoint or sqlite/sql check).
 - If the agent cannot run a check, it must provide `OPERATOR-RUN` commands and expected signatures.
+- All curl-based verification must load variables from:
+  - `ops/env/operator.env` via `source scripts/load_operator_env.sh`
+  - Agent output must reference this source step explicitly.
+
+## Deployment Topology + Auth Preflight (Required for Agent C)
+- Before proposing portal curl checks, Agent C must detect runtime topology:
+  1. Probe `GET /owner/events` with Bearer owner key.
+  2. Probe one known admin route with Bearer admin key (for example `POST /admin/scheduler/tick`).
+  3. Treat `/admin/settings` as optional control-plane-only; do not assume it exists on collapsed NG runtime.
+- Header contract baseline:
+  - NG runtime routes use `Authorization: Bearer <VOZ_OWNER_API_KEY|VOZ_ADMIN_API_KEY>`.
+  - Portal proxy routes may use `X-Vozlia-Admin-Key` to upstream control APIs.
+- Agent C must include explicit statement in output:
+  - `Topology detected: collapsed NG runtime` or `split control-plane`.
+  - `Auth header used for verification: Bearer` (or justified alternative).
 
 ## Bundle B005 (Ready)
 

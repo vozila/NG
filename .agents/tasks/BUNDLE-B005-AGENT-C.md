@@ -11,9 +11,13 @@
 ## Must verify
 - `/admin` shows deterministic configuration errors when auth/env is missing.
 - Tenant context is visible and required before mutating actions.
+- Run topology/auth preflight first:
+  - verify collapsed NG runtime vs split control-plane
+  - use Bearer auth checks for NG `/owner/*` and `/admin/*` probes
 
 ## Required checks
 - Front-end lint/build/test commands for the UI repo.
+- For any curl verification, first run: `source scripts/load_operator_env.sh`
 
 ## Mandatory Delivery Contract
 - Include a `Verification Commands` section with copy/paste commands actually run (or to run if blocked):

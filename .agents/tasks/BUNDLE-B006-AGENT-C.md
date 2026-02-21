@@ -14,6 +14,7 @@
 
 ## Required checks
 - Front-end lint/build/test commands for the UI repo.
+- For any curl verification, first run: `source scripts/load_operator_env.sh`
 
 ## Mandatory Delivery Contract
 - Include `Verification Commands`, `Expected Output Signatures`, `Render Env Changes Required`, and `OPERATOR-RUN` when blocked.

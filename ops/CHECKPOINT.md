@@ -31,6 +31,12 @@
 - Resolved Agent C bundle blocker conditions in `apps/vozlia-admin`:
   - `npm run lint` now passes.
   - `npm test` now exists and passes (`lint + tsc --noEmit`).
+- Added operator env-file workflow for verification curls:
+  - template: `ops/env/operator.env.example`
+  - local secrets file: `ops/env/operator.env` (gitignored)
+  - loader: `source scripts/load_operator_env.sh`
+- Regression selftest dependency fix:
+  - moved `httpx` into base runtime dependencies in `pyproject.toml` so `admin/quality/regression/run` can execute `shared_line_access` selftest on Render.
 
 ## Last known good
 - Flow A OpenAI Realtime bridge: audio deltas received + Twilio μ-law frames sent + caller hears speech.
