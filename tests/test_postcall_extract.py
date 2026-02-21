@@ -189,3 +189,51 @@ def test_llm_propose_json_falls_back_to_heuristic_on_model_failure(monkeypatch) 
         ai_mode="customer",
     )
     assert out["appt_request"]["requested"] is True
+
+
+def test_postcall_extract_v2_fields_persist(monkeypatch, tmp_path) -> None:
+    _set_env(monkeypatch, db_path=str(tmp_path / "postcall_v2.sqlite3"))
+    _seed_transcript(tenant_id="tenant_a", rid="rid-v2", text="Customer asked to talk to owner and call back tomorrow.")
+
+    def _v2_proposal(*, transcript: str, ai_mode: str):
+        return {
+            "summary": {
+                "headline": "Needs owner callback",
+                "bullet_points": ["bp1"],
+                "sentiment": "neutral",
+                "urgency": "high",
+                "action_items": ["owner callback today"],
+            },
+            "lead": {
+                "qualified": True,
+                "score": 91,
+                "stage": "hot",
+                "reasons": ["explicit owner request"],
+                "callback_requested": True,
+                "talk_to_owner": True,
+                "preferred_contact": "phone",
+            },
+            "appt_request": {
+                "requested": True,
+                "channel": "phone",
+                "preferred_window": "tomorrow",
+                "confidence": 0.92,
+            },
+        }
+
+    monkeypatch.setattr(postcall_extract, "_llm_propose_json", _v2_proposal)
+    client = TestClient(create_app())
+    resp = client.post(
+        "/admin/postcall/extract",
+        json={"tenant_id": "tenant_a", "rid": "rid-v2", "ai_mode": "customer", "idempotency_key": "idem-v2"},
+        headers=_auth(),
+    )
+    assert resp.status_code == 200
+
+    summary = query_events("tenant_a", event_type="postcall.summary", limit=10)[0]["payload"]
+    lead = query_events("tenant_a", event_type="postcall.lead", limit=10)[0]["payload"]
+    assert summary["urgency"] == "high"
+    assert summary["action_items"] == ["owner callback today"]
+    assert lead["callback_requested"] is True
+    assert lead["talk_to_owner"] is True
+    assert lead["preferred_contact"] == "phone"

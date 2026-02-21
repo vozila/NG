@@ -68,3 +68,12 @@ Command:
 5. Agent C merges memory-spine updates only after A/B outputs are validated.
 6. Bundle invocation phrase is standardized: `execute B00X` -> resolve via `scripts/agent_bundle_workflow.sh`.
 7. If an agent cannot run a verification step, it must provide exact copy/paste commands and expected output signatures for operator execution.
+
+## Mandatory Delivery Contract (All Agents)
+- Every agent output must include:
+  1. `Verification Commands` (copy/paste runnable)
+  2. `Expected Output Signatures`
+  3. `Render Env Changes Required` (exact var/value updates or confirms)
+- For API/backend tasks, verification must include at least one curl against the changed endpoint(s).
+- For persistence/event tasks, verification must include DB evidence (query endpoint or sqlite/sql check).
+- If the agent cannot run a check, it must provide `OPERATOR-RUN` commands and expected signatures.

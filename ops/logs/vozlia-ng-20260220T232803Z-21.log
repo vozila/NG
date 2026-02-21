@@ -1,0 +1,217 @@
+2026-02-20 23:28:00    Building wheel for vozlia-ng (pyproject.toml): finished with status 'done'
+2026-02-20 23:28:00    Created wheel for vozlia-ng: filename=vozlia_ng-0.0.0-py3-none-any.whl size=60166 sha256=d5928f3187472a4c781b754d271c15d8dd568fabc59deed0b4580c8768066f29
+2026-02-20 23:28:00    Stored in directory: /tmp/pip-ephem-wheel-cache-39k2zw9d/wheels/5a/f8/e0/58e42082500d50320d06a4baa628d7286902f98f440588a8e8
+2026-02-20 23:28:00  Successfully built vozlia-ng
+2026-02-20 23:28:00  Installing collected packages: websockets, uvloop, typing-extensions, pyyaml, python-dotenv, idna, httptools, h11, click, annotated-types, annotated-doc, uvicorn, typing-inspection, pydantic-core, anyio, watchfiles, starlette, pydantic, fastapi, vozlia-ng
+2026-02-20 23:28:01  
+2026-02-20 23:28:01  Successfully installed annotated-doc-0.0.4 annotated-types-0.7.0 anyio-4.12.1 click-8.3.1 fastapi-0.129.0 h11-0.16.0 httptools-0.7.1 idna-3.11 pydantic-2.12.5 pydantic-core-2.41.5 python-dotenv-1.2.1 pyyaml-6.0.3 starlette-0.52.1 typing-extensions-4.15.0 typing-inspection-0.4.2 uvicorn-0.41.0 uvloop-0.22.1 vozlia-ng-0.0.0 watchfiles-1.1.1 websockets-16.0
+2026-02-20 23:28:06  [34;1m==>[0;22m [1mUploading build...[22m
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T23:28:24Z end=2026-02-20T23:28:27Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-20T23:28:29Z end=2026-02-20T23:28:31Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")
+2026-02-20 23:28:32  [0;34m[1m==> [0m[1mDeploying...[0m
+2026-02-20 23:28:32  [0;34m[1m==> [0m[1mSetting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance[0m
+2026-02-20 23:28:58  [32m[1m==>(B[m [1mRunning 'uvicorn main:app --host 0.0.0.0 --port $PORT'(B[m
+2026-02-20 23:28:59  2026-02-20 23:28:59,771 INFO vozlia_ng FEATURES_DISCOVERED keys=['access_gate', 'admin_quality', 'business_profile', 'business_templates', 'ocr_ingest', 'owner_analytics_query', 'owner_events_api', 'owner_inbox', 'owner_insights', 'postcall_extract', 'postcall_notify_sms', 'postcall_reconcile', 'sample', 'shared_line_access', 'voice_flow_a', 'whatsapp_in']
+2026-02-20 23:28:59  2026-02-20 23:28:59,771 INFO vozlia_ng FEATURES_ENABLED keys=['owner_events_api', 'postcall_extract', 'shared_line_access', 'voice_flow_a']
+2026-02-20 23:28:59  INFO:     Started server process [55]
+2026-02-20 23:28:59  INFO:     Waiting for application startup.
+2026-02-20 23:28:59  INFO:     Application startup complete.
+2026-02-20 23:28:59  INFO:     Uvicorn running on http://0.0.0.0:10000 (Press CTRL+C to quit)
+2026-02-20 23:29:00  INFO:     127.0.0.1:58920 - "HEAD / HTTP/1.1" 405 Method Not Allowed
+2026-02-20 23:29:04  [0;32m[1m==> [0m[1mYour service is live 🎉[0m
+2026-02-20 23:29:04  [0;32m[1m==> [0m[1m[0m
+2026-02-20 23:29:04  [0;32m[1m==> [0m[1m///////////////////////////////////////////////////////////[0m
+2026-02-20 23:29:04  [0;32m[1m==> [0m[1m[0m
+2026-02-20 23:29:04  [0;32m[1m==> [0m[1mAvailable at your primary URL https://vozlia-ng.onrender.com[0m
+2026-02-20 23:29:04  [0;32m[1m==> [0m[1m[0m
+2026-02-20 23:29:04  [0;32m[1m==> [0m[1m///////////////////////////////////////////////////////////[0m
+2026-02-20 23:29:04  clientIP="34.82.57.203" requestID="4ea67ad2-e956-4205" responseTimeMS=5 responseBytes=208 userAgent="Go-http-client/2.0"
+2026-02-20 23:29:48  clientIP="54.158.53.69" requestID="dba762c6-a57f-41c7" responseTimeMS=5 responseBytes=531 userAgent="TwilioProxy/1.1"
+2026-02-20 23:29:57  clientIP="34.227.227.223" requestID="744b3da7-415c-4940" responseTimeMS=4 responseBytes=680 userAgent="TwilioProxy/1.1"
+2026-02-20 23:29:57  2026-02-20 23:29:57,400 INFO vozlia_ng vozlia_ng rid=CAd53c6a3c48298430a3583a7aada818a6 request received: /twilio/voice/access-code attempt=0 digits=87654321
+2026-02-20 23:29:57  2026-02-20 23:29:57,400 INFO vozlia_ng vozlia_ng rid=CAd53c6a3c48298430a3583a7aada818a6 ACCESS_CODE_ACCEPTED tenant_id=tenant_demo ai_mode=customer
+2026-02-20 23:29:57  2026-02-20 23:29:57,400 INFO vozlia_ng vozlia_ng rid=CAd53c6a3c48298430a3583a7aada818a6 routing decision: mode=shared to=+15186668613 tenant_id=tenant_demo ai_mode=customer
+2026-02-20 23:29:57  INFO:     34.227.227.223:0 - "POST /twilio/voice/access-code?attempt=0&rid=CAd53c6a3c48298430a3583a7aada818a6 HTTP/1.1" 200 OK
+2026-02-20 23:29:57  INFO:     107.23.46.139:0 - "WebSocket /twilio/stream" [accepted]
+2026-02-20 23:29:57  2026-02-20 23:29:57,474 INFO vozlia_ng TWILIO_WS_CONNECTED
+2026-02-20 23:29:57  INFO:     connection open
+2026-02-20 23:29:57  2026-02-20 23:29:57,479 INFO vozlia_ng TWILIO_WS_START streamSid=MZ14b9d80f95494bb34db69002c5445127 callSid=CAd53c6a3c48298430a3583a7aada818a6 from=+19178057859 tenant=tenant_demo tenant_mode=shared rid=CAd53c6a3c48298430a3583a7aada818a6 ai_mode=customer
+2026-02-20 23:29:57  2026-02-20 23:29:57,480 INFO vozlia_ng VOICE_FLOW_A_START tenant_id=tenant_demo tenant_mode=shared rid=CAd53c6a3c48298430a3583a7aada818a6 ai_mode=customer
+2026-02-20 23:29:57  2026-02-20 23:29:57,480 INFO vozlia_ng VOICE_FLOW_A_MODE_SELECTED ai_mode=customer tenant_id=tenant_demo rid=CAd53c6a3c48298430a3583a7aada818a6
+2026-02-20 23:29:57  2026-02-20 23:29:57,480 INFO vozlia_ng FLOW_A_KNOWLEDGE_CONTEXT template_key=None profile_version=None profile_hash=None
+2026-02-20 23:29:57  2026-02-20 23:29:57,480 INFO vozlia_ng FLOW_A_EVENT_EMIT_FAILED type=flow_a.call_started tenant_id=tenant_demo rid=CAd53c6a3c48298430a3583a7aada818a6 err=PermissionError(13, 'Permission denied')
+2026-02-20 23:29:57  2026-02-20 23:29:57,480 INFO vozlia_ng FLOW_A_EVENT_EMIT_FAILED type=flow_a.knowledge_context tenant_id=tenant_demo rid=CAd53c6a3c48298430a3583a7aada818a6 err=PermissionError(13, 'Permission denied')
+2026-02-20 23:29:58  2026-02-20 23:29:58,148 INFO vozlia_ng OPENAI_WS_CONNECTED
+2026-02-20 23:29:58  2026-02-20 23:29:58,149 INFO vozlia_ng OPENAI_SESSION_UPDATE_SENT
+2026-02-20 23:29:58  2026-02-20 23:29:58,153 INFO vozlia_ng OPENAI_SESSION_CREATED keys=['object', 'id', 'model', 'modalities', 'instructions', 'voice', 'output_audio_format', 'tools', 'tool_choice', 'temperature', 'max_response_output_tokens', 'turn_detection', 'speed', 'tracing', 'truncation', 'prompt', 'expires_at', 'input_audio_noise_reduction', 'input_audio_format', 'input_audio_transcription', 'client_secret', 'include'] output_modalities=['audio', 'text']
+2026-02-20 23:29:58  2026-02-20 23:29:58,209 INFO vozlia_ng OPENAI_SESSION_UPDATED keys=['object', 'id', 'model', 'modalities', 'instructions', 'voice', 'output_audio_format', 'tools', 'tool_choice', 'temperature', 'max_response_output_tokens', 'turn_detection', 'speed', 'tracing', 'truncation', 'prompt', 'expires_at', 'input_audio_noise_reduction', 'input_audio_format', 'input_audio_transcription', 'client_secret', 'include'] output_modalities=['audio', 'text']
+2026-02-20 23:30:00  2026-02-20 23:30:00,545 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 23:30:00  2026-02-20 23:30:00,545 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=1
+2026-02-20 23:30:01  2026-02-20 23:30:01,407 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 23:30:01  2026-02-20 23:30:01,769 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=6 turn=1
+2026-02-20 23:30:01  2026-02-20 23:30:01,770 INFO vozlia_ng FLOW_A_EVENT_EMIT_FAILED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAd53c6a3c48298430a3583a7aada818a6 err=PermissionError(13, 'Permission denied')
+2026-02-20 23:30:01  2026-02-20 23:30:01,770 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=1 modalities=['audio', 'text']
+2026-02-20 23:30:01  2026-02-20 23:30:01,838 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBUEbDQqXwJcJLAHj5tGf
+2026-02-20 23:30:02  2026-02-20 23:30:02,427 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBUEbDQqXwJcJLAHj5tGf bytes=800
+2026-02-20 23:30:02  2026-02-20 23:30:02,520 INFO vozlia_ng TWILIO_MAIN_FRAME_SENT first=1 response_id=resp_DBUEbDQqXwJcJLAHj5tGf bytes=960 q_main=19
+2026-02-20 23:30:03  2026-02-20 23:30:03,619 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBUEbDQqXwJcJLAHj5tGf output_modalities=None
+2026-02-20 23:30:03  2026-02-20 23:30:03,619 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBUEbDQqXwJcJLAHj5tGf dt_ms=1780
+2026-02-20 23:30:03  2026-02-20 23:30:03,619 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBUEbDQqXwJcJLAHj5tGf score=ok frames=275 chunks=22 bytes=44000 same_ratio=0.00 same_run_max=1 low_div_ratio=0.04 silence_ratio=0.00
+2026-02-20 23:30:03  2026-02-20 23:30:03,619 INFO vozlia_ng FLOW_A_EVENT_EMIT_FAILED type=flow_a.response_done tenant_id=tenant_demo rid=CAd53c6a3c48298430a3583a7aada818a6 err=PermissionError(13, 'Permission denied')
+2026-02-20 23:30:03  2026-02-20 23:30:03,619 INFO vozlia_ng Response resp_DBUEbDQqXwJcJLAHj5tGf finished with event 'response.done'; clearing active_response_id
+2026-02-20 23:30:11  2026-02-20 23:30:11,605 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 23:30:11  2026-02-20 23:30:11,605 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=2
+2026-02-20 23:30:12  2026-02-20 23:30:12,407 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 23:30:12  2026-02-20 23:30:12,805 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=10 turn=2
+2026-02-20 23:30:12  2026-02-20 23:30:12,806 INFO vozlia_ng FLOW_A_EVENT_EMIT_FAILED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAd53c6a3c48298430a3583a7aada818a6 err=PermissionError(13, 'Permission denied')
+2026-02-20 23:30:12  2026-02-20 23:30:12,806 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=2 modalities=['audio', 'text']
+2026-02-20 23:30:12  2026-02-20 23:30:12,875 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBUEmDJic2c3CQEFZjHVP
+2026-02-20 23:30:13  2026-02-20 23:30:13,632 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBUEmDJic2c3CQEFZjHVP bytes=800
+2026-02-20 23:30:13  2026-02-20 23:30:13,761 INFO vozlia_ng TWILIO_MAIN_FRAME_SENT first=1 response_id=resp_DBUEmDJic2c3CQEFZjHVP bytes=960 q_main=19
+2026-02-20 23:30:14  2026-02-20 23:30:14,915 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBUEmDJic2c3CQEFZjHVP output_modalities=None
+2026-02-20 23:30:14  2026-02-20 23:30:14,916 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBUEmDJic2c3CQEFZjHVP dt_ms=2040
+2026-02-20 23:30:14  2026-02-20 23:30:14,916 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBUEmDJic2c3CQEFZjHVP score=ok frames=142 chunks=11 bytes=22720 same_ratio=0.00 same_run_max=1 low_div_ratio=0.04 silence_ratio=0.00
+2026-02-20 23:30:14  2026-02-20 23:30:14,916 INFO vozlia_ng FLOW_A_EVENT_EMIT_FAILED type=flow_a.response_done tenant_id=tenant_demo rid=CAd53c6a3c48298430a3583a7aada818a6 err=PermissionError(13, 'Permission denied')
+2026-02-20 23:30:14  2026-02-20 23:30:14,916 INFO vozlia_ng Response resp_DBUEmDJic2c3CQEFZjHVP finished with event 'response.done'; clearing active_response_id
+2026-02-20 23:30:19  2026-02-20 23:30:19,049 INFO vozlia_ng TWILIO_WS_STOP streamSid=MZ14b9d80f95494bb34db69002c5445127 callSid=CAd53c6a3c48298430a3583a7aada818a6
+2026-02-20 23:30:19  2026-02-20 23:30:19,050 INFO vozlia_ng FLOW_A_EVENT_EMIT_FAILED type=flow_a.call_stopped tenant_id=tenant_demo rid=CAd53c6a3c48298430a3583a7aada818a6 err=PermissionError(13, 'Permission denied')
+2026-02-20 23:30:20  clientIP="107.23.46.139" requestID="" responseTimeMS=22587 responseBytes=0 userAgent="Twilio.TmeWs/1.0"
+2026-02-20 23:30:20  INFO:     connection closed
+2026-02-20 23:30:23  clientIP="3.91.104.80" requestID="fb0cffe7-92ce-4189" responseTimeMS=3 responseBytes=531 userAgent="TwilioProxy/1.1"
+2026-02-20 23:30:23  2026-02-20 23:30:23,683 INFO vozlia_ng vozlia_ng rid=CA72b1509d6ae816000a53d6ffa0bb842c request received: /twilio/voice to=+15186668613 from=+19178057859
+2026-02-20 23:30:23  2026-02-20 23:30:23,683 INFO vozlia_ng vozlia_ng rid=CA72b1509d6ae816000a53d6ffa0bb842c routing decision: mode=shared to=+15186668613 tenant_id=None ai_mode=None
+2026-02-20 23:30:23  INFO:     3.91.104.80:0 - "POST /twilio/voice HTTP/1.1" 200 OK
+2026-02-20 23:30:30  clientIP="3.87.185.197" requestID="14ca206a-9c43-413a" responseTimeMS=10 responseBytes=677 userAgent="TwilioProxy/1.1"
+2026-02-20 23:30:31  2026-02-20 23:30:31,420 INFO vozlia_ng OPENAI_WS_CONNECTED
+2026-02-20 23:30:31  2026-02-20 23:30:31,420 INFO vozlia_ng OPENAI_SESSION_UPDATE_SENT
+2026-02-20 23:30:31  2026-02-20 23:30:31,423 INFO vozlia_ng OPENAI_SESSION_CREATED keys=['object', 'id', 'model', 'modalities', 'instructions', 'voice', 'output_audio_format', 'tools', 'tool_choice', 'temperature', 'max_response_output_tokens', 'turn_detection', 'speed', 'tracing', 'truncation', 'prompt', 'expires_at', 'input_audio_noise_reduction', 'input_audio_format', 'input_audio_transcription', 'client_secret', 'include'] output_modalities=['audio', 'text']
+2026-02-20 23:30:31  2026-02-20 23:30:31,469 INFO vozlia_ng OPENAI_SESSION_UPDATED keys=['object', 'id', 'model', 'modalities', 'instructions', 'voice', 'output_audio_format', 'tools', 'tool_choice', 'temperature', 'max_response_output_tokens', 'turn_detection', 'speed', 'tracing', 'truncation', 'prompt', 'expires_at', 'input_audio_noise_reduction', 'input_audio_format', 'input_audio_transcription', 'client_secret', 'include'] output_modalities=['audio', 'text']
+2026-02-20 23:30:33  2026-02-20 23:30:33,362 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 23:30:33  2026-02-20 23:30:33,362 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=1
+2026-02-20 23:30:34  2026-02-20 23:30:34,228 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 23:30:34  2026-02-20 23:30:34,567 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=6 turn=1
+2026-02-20 23:30:34  2026-02-20 23:30:34,568 INFO vozlia_ng FLOW_A_EVENT_EMIT_FAILED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CA72b1509d6ae816000a53d6ffa0bb842c err=PermissionError(13, 'Permission denied')
+2026-02-20 23:30:34  2026-02-20 23:30:34,568 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=1 modalities=['audio', 'text']
+2026-02-20 23:30:34  2026-02-20 23:30:34,622 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBUF8lNzpkpuX2783FMhZ
+2026-02-20 23:30:34  2026-02-20 23:30:34,970 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBUF8lNzpkpuX2783FMhZ bytes=800
+2026-02-20 23:30:35  2026-02-20 23:30:35,066 INFO vozlia_ng TWILIO_MAIN_FRAME_SENT first=1 response_id=resp_DBUF8lNzpkpuX2783FMhZ bytes=960 q_main=19
+2026-02-20 23:30:36  2026-02-20 23:30:36,141 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBUF8lNzpkpuX2783FMhZ output_modalities=None
+2026-02-20 23:30:36  2026-02-20 23:30:36,141 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBUF8lNzpkpuX2783FMhZ dt_ms=1519
+2026-02-20 23:30:36  2026-02-20 23:30:36,141 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBUF8lNzpkpuX2783FMhZ score=ok frames=262 chunks=21 bytes=41920 same_ratio=0.00 same_run_max=1 low_div_ratio=0.03 silence_ratio=0.00
+2026-02-20 23:30:36  2026-02-20 23:30:36,142 INFO vozlia_ng FLOW_A_EVENT_EMIT_FAILED type=flow_a.response_done tenant_id=tenant_demo rid=CA72b1509d6ae816000a53d6ffa0bb842c err=PermissionError(13, 'Permission denied')
+2026-02-20 23:30:36  2026-02-20 23:30:36,142 INFO vozlia_ng Response resp_DBUF8lNzpkpuX2783FMhZ finished with event 'response.done'; clearing active_response_id
+2026-02-20 23:30:42  2026-02-20 23:30:42,065 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 23:30:42  2026-02-20 23:30:42,066 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=2
+2026-02-20 23:30:43  2026-02-20 23:30:43,226 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 23:30:43  2026-02-20 23:30:43,601 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=10 turn=2
+2026-02-20 23:30:43  2026-02-20 23:30:43,602 INFO vozlia_ng FLOW_A_EVENT_EMIT_FAILED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CA72b1509d6ae816000a53d6ffa0bb842c err=PermissionError(13, 'Permission denied')
+2026-02-20 23:30:43  2026-02-20 23:30:43,602 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=2 modalities=['audio', 'text']
+2026-02-20 23:30:43  2026-02-20 23:30:43,657 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBUFHLs7BwGlv3VFoJ4do
+2026-02-20 23:30:44  2026-02-20 23:30:44,139 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBUFHLs7BwGlv3VFoJ4do bytes=800
+2026-02-20 23:30:44  2026-02-20 23:30:44,238 INFO vozlia_ng TWILIO_MAIN_FRAME_SENT first=1 response_id=resp_DBUFHLs7BwGlv3VFoJ4do bytes=960 q_main=19
+2026-02-20 23:30:45  2026-02-20 23:30:45,829 INFO vozlia_ng TWILIO_WS_STOP streamSid=MZ778ef5eca0d85beda6680bc55b51a08c callSid=CA72b1509d6ae816000a53d6ffa0bb842c
+2026-02-20 23:30:45  2026-02-20 23:30:45,829 INFO vozlia_ng FLOW_A_EVENT_EMIT_FAILED type=flow_a.call_stopped tenant_id=tenant_demo rid=CA72b1509d6ae816000a53d6ffa0bb842c err=PermissionError(13, 'Permission denied')
+2026-02-20 23:30:46  clientIP="54.198.179.30" requestID="" responseTimeMS=16019 responseBytes=0 userAgent="Twilio.TmeWs/1.0"
+2026-02-20 23:30:46  INFO:     connection closed
+2026-02-20 23:31:14  clientIP="74.101.122.21" requestID="65ba533a-6c7c-492f" responseTimeMS=21 responseBytes=227 userAgent="curl/8.7.1"
+2026-02-20 23:31:14  INFO:     74.101.122.21:0 - "GET /owner/events?tenant_id=tenant_demo&limit=50 HTTP/1.1" 500 Internal Server Error
+2026-02-20 23:31:14  ERROR:    Exception in ASGI application
+2026-02-20 23:31:14  Traceback (most recent call last):
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 416, in run_asgi
+2026-02-20 23:31:14      result = await app(  # type: ignore[func-returns-value]
+2026-02-20 23:31:14               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+2026-02-20 23:31:14      return await self.app(scope, receive, send)
+2026-02-20 23:31:14             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1134, in __call__
+2026-02-20 23:31:14      await super().__call__(scope, receive, send)
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/starlette/applications.py", line 107, in __call__
+2026-02-20 23:31:14      await self.middleware_stack(scope, receive, send)
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+2026-02-20 23:31:14      raise exc
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+2026-02-20 23:31:14      await self.app(scope, receive, _send)
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+2026-02-20 23:31:14      await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+2026-02-20 23:31:14      raise exc
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+2026-02-20 23:31:14      await app(scope, receive, sender)
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+2026-02-20 23:31:14      await self.app(scope, receive, send)
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/starlette/routing.py", line 716, in __call__
+2026-02-20 23:31:14      await self.middleware_stack(scope, receive, send)
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/starlette/routing.py", line 736, in app
+2026-02-20 23:31:14      await route.handle(scope, receive, send)
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/starlette/routing.py", line 290, in handle
+2026-02-20 23:31:14      await self.app(scope, receive, send)
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 119, in app
+2026-02-20 23:31:14      await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+2026-02-20 23:31:14      raise exc
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+2026-02-20 23:31:14      await app(scope, receive, sender)
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 105, in app
+2026-02-20 23:31:14      response = await f(request)
+2026-02-20 23:31:14                 ^^^^^^^^^^^^^^^^
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 424, in app
+2026-02-20 23:31:14      raw_response = await run_endpoint_function(
+2026-02-20 23:31:14                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-02-20 23:31:14    File "/opt/render/project/src/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 312, in run_endpoint_function
+2026-02-20 23:31:14      return await dependant.call(**values)
+2026-02-20 23:31:14             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-02-20 23:31:14    File "/opt/render/project/src/features/owner_events_api.py", line 54, in owner_events
+2026-02-20 23:31:14      rows = query_events(
+2026-02-20 23:31:14             ^^^^^^^^^^^^^
+2026-02-20 23:31:14    File "/opt/render/project/src/core/db.py", line 194, in query_events
+2026-02-20 23:31:14      with get_conn() as conn:
+2026-02-20 23:31:14           ^^^^^^^^^^
+2026-02-20 23:31:14    File "/opt/render/project/src/core/db.py", line 77, in get_conn
+2026-02-20 23:31:14      Path(path).parent.mkdir(parents=True, exist_ok=True)
+2026-02-20 23:31:14    File "/opt/render/project/python/Python-3.12.8/lib/python3.12/pathlib.py", line 1311, in mkdir
+2026-02-20 23:31:14      os.mkdir(self, mode)
+2026-02-20 23:31:14  PermissionError: [Errno 13] Permission denied: '/var/data'

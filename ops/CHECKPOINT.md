@@ -23,6 +23,7 @@
   - `TASK-0402`: DONE
   - `TASK-0403`: DONE
 - Required task evidence now includes checks run plus concrete render-log references in each active bundle task file.
+- Bundle B003 Agent C portal delivery is recorded with mandatory verification sections; live endpoint checks remain operator-run due session/auth dependency.
 
 ## Last known good
 - Flow A OpenAI Realtime bridge: audio deltas received + Twilio μ-law frames sent + caller hears speech.
@@ -43,6 +44,7 @@
 
 ## Next actions
 - Open next 3-agent bundle cycle and assign next three non-overlapping tasks.
+- Close Bundle B003 by running operator-side portal/API verification commands and logging outputs.
 - Add/verify feature gating via `VOZ_FEATURE_<NAME>_AI_MODES`.
 - Build owner analytics views on top of durable `flow_a.*` and `postcall.*` facts.
 - Roll out caller metadata contract consumers across owner automations (inbox/notify workflows).

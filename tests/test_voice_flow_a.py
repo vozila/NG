@@ -14,6 +14,8 @@ from features.voice_flow_a import (
     _build_twilio_clear_msg,
     _build_twilio_mark_msg,
     _chunk_to_frames,
+    _customer_sms_followup_enabled,
+    _detect_transcript_intents,
     _diag_init,
     _diag_score,
     _diag_update_frame,
@@ -437,6 +439,7 @@ def test_resolve_customer_knowledge_context_falls_back_to_env(monkeypatch) -> No
 
 def test_build_customer_instructions_includes_baseline_and_knowledge(monkeypatch) -> None:
     monkeypatch.setenv("VOZ_FLOW_A_CUSTOMER_SAFE_BASELINE", "Use careful customer-safe language.")
+    monkeypatch.setenv("VOZ_FLOW_A_TALK_TO_OWNER_BASELINE", "Escalate owner requests and capture callback.")
     out = _build_customer_instructions(
         base_instructions="Base policy.",
         mode_instructions="Customer mode policy.",
@@ -455,10 +458,12 @@ def test_build_customer_instructions_includes_baseline_and_knowledge(monkeypatch
     assert "profile_hash: hash_7" in out
     assert "profile_summary: Haircut from $30." in out
     assert "template_prompt: Be brief and practical." in out
+    assert "Escalate owner requests and capture callback." in out
 
 
 def test_build_customer_instructions_uses_base_when_mode_missing(monkeypatch) -> None:
     monkeypatch.setenv("VOZ_FLOW_A_CUSTOMER_SAFE_BASELINE", "Escalate when needed.")
+    monkeypatch.setenv("VOZ_FLOW_A_TALK_TO_OWNER_BASELINE", "Offer owner follow-up.")
     out = _build_customer_instructions(
         base_instructions="Base instructions only.",
         mode_instructions=None,
@@ -472,7 +477,31 @@ def test_build_customer_instructions_uses_base_when_mode_missing(monkeypatch) ->
     )
     assert "Base instructions only." in out
     assert "Escalate when needed." in out
+    assert "Offer owner follow-up." in out
     assert "Knowledge context:" not in out
+
+
+def test_detect_transcript_intents_flags_callback_appointment_and_owner() -> None:
+    out = _detect_transcript_intents(
+        "Can I book an appointment and please have the owner call me back tomorrow?"
+    )
+    assert out["callback"] is True
+    assert out["appointment"] is True
+    assert out["talk_to_owner"] is True
+
+
+def test_detect_transcript_intents_no_match() -> None:
+    out = _detect_transcript_intents("Thanks, just checking your address.")
+    assert out["callback"] is False
+    assert out["appointment"] is False
+    assert out["talk_to_owner"] is False
+
+
+def test_customer_sms_followup_enabled_env(monkeypatch) -> None:
+    monkeypatch.delenv("VOICE_CUSTOMER_SMS_FOLLOWUP_ENABLED", raising=False)
+    assert _customer_sms_followup_enabled() is False
+    monkeypatch.setenv("VOICE_CUSTOMER_SMS_FOLLOWUP_ENABLED", "1")
+    assert _customer_sms_followup_enabled() is True
 
 
 def test_emit_flow_a_event_kill_switch_off_makes_no_db_calls(monkeypatch) -> None:

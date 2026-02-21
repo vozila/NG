@@ -1,6 +1,6 @@
 # Reference Pack — Post-call Extract
 
-**Updated:** 2026-02-19 (America/New_York)
+**Updated:** 2026-02-21 (America/New_York)
 
 ## Scope
 Feature module: `features/postcall_extract.py`  
@@ -49,6 +49,20 @@ Output event types:
 - `postcall.summary`
 - `postcall.lead` (customer mode only)
 - `postcall.appt_request` (customer mode only, and only when request is detected)
+
+## Extraction v2 fields (TASK-0243)
+Additional schema fields now emitted when present:
+- `postcall.summary` payload:
+  - `urgency`: `low|medium|high`
+  - `action_items`: list of concise follow-up items (max 5)
+- `postcall.lead` payload:
+  - `callback_requested`: bool
+  - `talk_to_owner`: bool
+  - `preferred_contact`: `phone|sms|email|unknown`
+
+Heuristic proposer defaults:
+- `urgency=high` when transcript requests owner/manager escalation.
+- `callback_requested=true` on callback phrases (`call me`, `callback`, `call back`).
 
 Mode-aware output policy:
 - `ai_mode=customer`:

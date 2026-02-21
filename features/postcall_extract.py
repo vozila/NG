@@ -49,6 +49,8 @@ class SummaryJSON(BaseModel):
     headline: str = Field(min_length=1, max_length=180)
     bullet_points: list[str] = Field(min_length=1, max_length=5)
     sentiment: Literal["positive", "neutral", "negative"]
+    urgency: Literal["low", "medium", "high"] = "low"
+    action_items: list[str] = Field(default_factory=list, max_length=5)
 
 
 class LeadJSON(BaseModel):
@@ -58,6 +60,9 @@ class LeadJSON(BaseModel):
     score: int = Field(ge=0, le=100)
     stage: Literal["hot", "warm", "cold"]
     reasons: list[str] = Field(min_length=1, max_length=5)
+    callback_requested: bool = False
+    talk_to_owner: bool = False
+    preferred_contact: Literal["phone", "sms", "email", "unknown"] = "unknown"
 
 
 class AppointmentRequestJSON(BaseModel):
@@ -149,10 +154,13 @@ def _heuristic_propose_json(*, transcript: str, ai_mode: str) -> dict[str, Any]:
     requested = any(
         token in lower for token in ("appointment", "book", "schedule", "meeting", "call me", "next week")
     )
+    callback_requested = any(token in lower for token in ("call me", "callback", "call back"))
+    talk_to_owner = any(token in lower for token in ("owner", "manager", "supervisor"))
     hot = any(token in lower for token in ("buy", "ready", "price", "quote", "contract", "sign"))
     score = 80 if hot else 45
     stage = "hot" if hot else "warm"
     sentiment = _pick_sentiment(lower)
+    urgency = "high" if talk_to_owner else ("medium" if requested or hot else "low")
 
     preferred_window: str | None = None
     m = re.search(r"\b(tomorrow|monday|tuesday|wednesday|thursday|friday|next week)\b", lower)
@@ -168,12 +176,17 @@ def _heuristic_propose_json(*, transcript: str, ai_mode: str) -> dict[str, Any]:
                 f"Appointment requested: {requested}",
             ],
             "sentiment": sentiment,
+            "urgency": urgency,
+            "action_items": ["owner follow-up requested"] if talk_to_owner else [],
         },
         "lead": {
             "qualified": hot,
             "score": score,
             "stage": stage if hot else "cold" if "not interested" in lower else stage,
             "reasons": ["purchase intent detected" if hot else "follow-up needed"],
+            "callback_requested": callback_requested,
+            "talk_to_owner": talk_to_owner,
+            "preferred_contact": "phone" if callback_requested else "unknown",
         },
         "appt_request": {
             "requested": requested,

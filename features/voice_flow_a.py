@@ -299,6 +299,54 @@ def _customer_safe_baseline_instructions() -> str:
     return (os.getenv("VOZ_FLOW_A_CUSTOMER_SAFE_BASELINE") or "").strip() or default
 
 
+def _talk_to_owner_baseline_instructions() -> str:
+    default = (
+        "Talk-to-owner baseline:\n"
+        "- If caller asks to talk to the owner/manager, acknowledge and offer to relay details.\n"
+        "- Offer to capture callback number, best time, and brief reason for escalation."
+    )
+    return (os.getenv("VOZ_FLOW_A_TALK_TO_OWNER_BASELINE") or "").strip() or default
+
+
+def _customer_sms_followup_enabled() -> bool:
+    return (os.getenv("VOICE_CUSTOMER_SMS_FOLLOWUP_ENABLED") or "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _detect_transcript_intents(transcript: str) -> dict[str, bool]:
+    txt = " ".join((transcript or "").lower().split())
+    callback_terms = (
+        "call me back",
+        "callback",
+        "call back",
+        "ring me back",
+    )
+    appointment_terms = (
+        "appointment",
+        "book",
+        "booking",
+        "schedule",
+        "reservation",
+    )
+    talk_owner_terms = (
+        "talk to owner",
+        "speak to owner",
+        "owner please",
+        "owner call me",
+        "talk to manager",
+        "speak to manager",
+    )
+    return {
+        "callback": any(term in txt for term in callback_terms),
+        "appointment": any(term in txt for term in appointment_terms),
+        "talk_to_owner": any(term in txt for term in talk_owner_terms),
+    }
+
+
 def _resolve_customer_knowledge_context(*, custom_parameters: dict[str, Any]) -> dict[str, str | None]:
     def _clean(v: Any) -> str | None:
         if not isinstance(v, str):
@@ -358,6 +406,9 @@ def _build_customer_instructions(
     baseline = _customer_safe_baseline_instructions().strip()
     if baseline:
         blocks.append(baseline)
+    owner_baseline = _talk_to_owner_baseline_instructions().strip()
+    if owner_baseline:
+        blocks.append(owner_baseline)
 
     template_key = knowledge_context.get("template_key")
     profile_version = knowledge_context.get("profile_version")
@@ -1162,6 +1213,7 @@ async def twilio_stream(websocket: WebSocket) -> None:
     call_to_number: str | None = None
     event_emit_enabled = _event_emit_enabled()
     call_stopped_emitted = False
+    emitted_intent_event_keys: set[str] = set()
     last_speech_started_ts: float | None = None
     pending_speech_started_at: float | None = None
     pending_speech_started_media_frames: int | None = None
@@ -1408,6 +1460,82 @@ async def twilio_stream(websocket: WebSocket) -> None:
                         "transcript": _sanitize_transcript_for_event(transcript),
                     },
                 )
+                intents = _detect_transcript_intents(transcript)
+                sanitized = _sanitize_transcript_for_event(transcript)
+
+                if intents.get("callback") and "callback" not in emitted_intent_event_keys:
+                    emitted_intent_event_keys.add("callback")
+                    await _emit_flow_a_event(
+                        enabled=event_emit_enabled,
+                        tenant_id=call_tenant_id,
+                        rid=call_rid,
+                        event_type="flow_a.intent_callback",
+                        payload={
+                            "tenant_id": call_tenant_id,
+                            "rid": call_rid,
+                            "ai_mode": call_ai_mode,
+                            "tenant_mode": call_tenant_mode,
+                            "turn": turn_seq,
+                            "transcript": sanitized,
+                            "from_number": call_from_number,
+                        },
+                        idempotency_key=f"{call_rid}:intent_callback" if call_rid else None,
+                    )
+                if intents.get("appointment") and "appointment" not in emitted_intent_event_keys:
+                    emitted_intent_event_keys.add("appointment")
+                    await _emit_flow_a_event(
+                        enabled=event_emit_enabled,
+                        tenant_id=call_tenant_id,
+                        rid=call_rid,
+                        event_type="flow_a.intent_appointment",
+                        payload={
+                            "tenant_id": call_tenant_id,
+                            "rid": call_rid,
+                            "ai_mode": call_ai_mode,
+                            "tenant_mode": call_tenant_mode,
+                            "turn": turn_seq,
+                            "transcript": sanitized,
+                        },
+                        idempotency_key=f"{call_rid}:intent_appointment" if call_rid else None,
+                    )
+                if intents.get("talk_to_owner") and "talk_to_owner" not in emitted_intent_event_keys:
+                    emitted_intent_event_keys.add("talk_to_owner")
+                    await _emit_flow_a_event(
+                        enabled=event_emit_enabled,
+                        tenant_id=call_tenant_id,
+                        rid=call_rid,
+                        event_type="flow_a.intent_talk_to_owner",
+                        payload={
+                            "tenant_id": call_tenant_id,
+                            "rid": call_rid,
+                            "ai_mode": call_ai_mode,
+                            "tenant_mode": call_tenant_mode,
+                            "turn": turn_seq,
+                            "transcript": sanitized,
+                        },
+                        idempotency_key=f"{call_rid}:intent_talk_to_owner" if call_rid else None,
+                    )
+                if (
+                    intents.get("callback")
+                    and _customer_sms_followup_enabled()
+                    and "sms_followup_requested" not in emitted_intent_event_keys
+                ):
+                    emitted_intent_event_keys.add("sms_followup_requested")
+                    await _emit_flow_a_event(
+                        enabled=event_emit_enabled,
+                        tenant_id=call_tenant_id,
+                        rid=call_rid,
+                        event_type="flow_a.sms_followup_requested",
+                        payload={
+                            "tenant_id": call_tenant_id,
+                            "rid": call_rid,
+                            "ai_mode": call_ai_mode,
+                            "tenant_mode": call_tenant_mode,
+                            "turn": turn_seq,
+                            "to_number": call_from_number,
+                        },
+                        idempotency_key=f"{call_rid}:sms_followup_requested" if call_rid else None,
+                    )
 
                 if active_response_id is not None:
                     continue

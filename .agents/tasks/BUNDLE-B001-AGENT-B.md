@@ -26,3 +26,12 @@ Read this file before starting.
 - `features/*`
 - `tests/test_voice_flow_a.py`
 - Memory-spine docs outside the reference pack listed above.
+
+## Mandatory Delivery Contract
+- Include a `Verification Commands` section with copy/paste commands actually run (or to run if blocked):
+  - curl commands (when HTTP/API behavior is touched)
+  - DB verification commands (sqlite/sql or endpoint reads) when persistence is touched
+  - lint/typecheck/test commands with exit status
+- Include an `Expected Output Signatures` section for each verification command.
+- Include a `Render Env Changes Required` section listing exact variable names/values to set or confirm.
+- If unable to execute a verification command, mark `OPERATOR-RUN` and still provide exact command + expected signature.

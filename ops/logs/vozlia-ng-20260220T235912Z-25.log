@@ -1,0 +1,91 @@
+2026-02-20 23:59:10  2026-02-20 23:59:10,391 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 23:59:10  2026-02-20 23:59:10,391 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=1
+2026-02-20 23:59:11  2026-02-20 23:59:11,311 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 23:59:11  2026-02-20 23:59:11,611 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=6 turn=1
+2026-02-20 23:59:11  2026-02-20 23:59:11,617 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CA34984be53956728e2a7fe357c1e84229
+2026-02-20 23:59:11  2026-02-20 23:59:11,618 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=1 modalities=['audio', 'text']
+2026-02-20 23:59:11  2026-02-20 23:59:11,678 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBUgpcuGFn9U64qHbDQ6O
+2026-02-20 23:59:12  2026-02-20 23:59:12,023 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBUgpcuGFn9U64qHbDQ6O bytes=800
+2026-02-20 23:59:12  2026-02-20 23:59:12,085 INFO vozlia_ng TWILIO_MAIN_FRAME_SENT first=1 response_id=resp_DBUgpcuGFn9U64qHbDQ6O bytes=960 q_main=19
+2026-02-20 23:59:19  2026-02-20 23:59:19,330 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 23:59:19  2026-02-20 23:59:19,331 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=2
+2026-02-20 23:59:21  2026-02-20 23:59:21,052 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-20 23:59:21  2026-02-20 23:59:21,274 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=30 turn=2
+2026-02-20 23:59:21  2026-02-20 23:59:21,280 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CA34984be53956728e2a7fe357c1e84229
+2026-02-20 23:59:21  2026-02-20 23:59:21,280 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=2 modalities=['audio', 'text']
+2026-02-20 23:59:21  2026-02-20 23:59:21,338 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBUgzfH9QznUdYFcMvKKG
+2026-02-20 23:59:21  2026-02-20 23:59:21,635 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBUgzfH9QznUdYFcMvKKG bytes=800
+2026-02-20 23:59:21  2026-02-20 23:59:21,702 INFO vozlia_ng TWILIO_MAIN_FRAME_SENT first=1 response_id=resp_DBUgzfH9QznUdYFcMvKKG bytes=960 q_main=19
+2026-02-20 23:59:22  2026-02-20 23:59:22,493 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBUgzfH9QznUdYFcMvKKG output_modalities=None
+2026-02-20 23:59:22  2026-02-20 23:59:22,493 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBUgzfH9QznUdYFcMvKKG dt_ms=1155
+2026-02-20 23:59:22  2026-02-20 23:59:22,494 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBUgzfH9QznUdYFcMvKKG score=ok frames=222 chunks=17 bytes=35520 same_ratio=0.00 same_run_max=1 low_div_ratio=0.11 silence_ratio=0.00
+2026-02-20 23:59:22  2026-02-20 23:59:22,500 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CA34984be53956728e2a7fe357c1e84229
+2026-02-20 23:59:22  2026-02-20 23:59:22,500 INFO vozlia_ng Response resp_DBUgzfH9QznUdYFcMvKKG finished with event 'response.done'; clearing active_response_id
+2026-02-20 23:59:27  2026-02-20 23:59:27,348 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-20 23:59:27  2026-02-20 23:59:27,348 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=3
+2026-02-20 23:59:28  2026-02-20 23:59:28,865 INFO vozlia_ng TWILIO_WS_STOP streamSid=MZ5a0c23ce64ed36913a5da1cc77c64e5b callSid=CA34984be53956728e2a7fe357c1e84229
+2026-02-20 23:59:28  2026-02-20 23:59:28,871 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.call_stopped tenant_id=tenant_demo rid=CA34984be53956728e2a7fe357c1e84229
+2026-02-20 23:59:29  INFO:     connection closed
+2026-02-20 23:59:29  clientIP="34.229.211.202" requestID="" responseTimeMS=22023 responseBytes=0 userAgent="Twilio.TmeWs/1.0"
+2026-02-20 23:59:37  clientIP="74.101.122.21" requestID="8c80399b-13e0-4e64" responseTimeMS=7 responseBytes=853 userAgent="curl/8.7.1"
+2026-02-20 23:59:37  INFO:     74.101.122.21:0 - "GET /owner/events?tenant_id=tenant_demo&limit=50 HTTP/1.1" 200 OK
+2026-02-21 00:00:35  clientIP="54.156.64.89" requestID="747d89b0-b221-420a" responseTimeMS=5 responseBytes=531 userAgent="TwilioProxy/1.1"
+2026-02-21 00:00:42  clientIP="98.86.233.2" requestID="6e2cf22e-620f-4cff" responseTimeMS=8 responseBytes=680 userAgent="TwilioProxy/1.1"
+2026-02-21 00:00:42  2026-02-21 00:00:42,087 INFO vozlia_ng vozlia_ng rid=CAe39412bf92d6505d89f8d1d655e9d07a request received: /twilio/voice/access-code attempt=0 digits=87654321
+2026-02-21 00:00:42  2026-02-21 00:00:42,087 INFO vozlia_ng vozlia_ng rid=CAe39412bf92d6505d89f8d1d655e9d07a ACCESS_CODE_ACCEPTED tenant_id=tenant_demo ai_mode=customer
+2026-02-21 00:00:42  2026-02-21 00:00:42,087 INFO vozlia_ng vozlia_ng rid=CAe39412bf92d6505d89f8d1d655e9d07a routing decision: mode=shared to=+15186668613 tenant_id=tenant_demo ai_mode=customer
+2026-02-21 00:00:42  INFO:     98.86.233.2:0 - "POST /twilio/voice/access-code?attempt=0&rid=CAe39412bf92d6505d89f8d1d655e9d07a HTTP/1.1" 200 OK
+2026-02-21 00:00:42  INFO:     3.89.144.80:0 - "WebSocket /twilio/stream" [accepted]
+2026-02-21 00:00:42  2026-02-21 00:00:42,182 INFO vozlia_ng TWILIO_WS_CONNECTED
+2026-02-21 00:00:42  INFO:     connection open
+2026-02-21 00:00:42  2026-02-21 00:00:42,191 INFO vozlia_ng TWILIO_WS_START streamSid=MZ7298e5374181976d438421ddcabdab66 callSid=CAe39412bf92d6505d89f8d1d655e9d07a from=+19178057859 tenant=tenant_demo tenant_mode=shared rid=CAe39412bf92d6505d89f8d1d655e9d07a ai_mode=customer
+2026-02-21 00:00:42  2026-02-21 00:00:42,191 INFO vozlia_ng VOICE_FLOW_A_START tenant_id=tenant_demo tenant_mode=shared rid=CAe39412bf92d6505d89f8d1d655e9d07a ai_mode=customer
+2026-02-21 00:00:42  2026-02-21 00:00:42,191 INFO vozlia_ng VOICE_FLOW_A_MODE_SELECTED ai_mode=customer tenant_id=tenant_demo rid=CAe39412bf92d6505d89f8d1d655e9d07a
+2026-02-21 00:00:42  2026-02-21 00:00:42,191 INFO vozlia_ng FLOW_A_KNOWLEDGE_CONTEXT template_key=None profile_version=None profile_hash=None
+2026-02-21 00:00:42  2026-02-21 00:00:42,197 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.call_started tenant_id=tenant_demo rid=CAe39412bf92d6505d89f8d1d655e9d07a
+2026-02-21 00:00:42  2026-02-21 00:00:42,203 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.knowledge_context tenant_id=tenant_demo rid=CAe39412bf92d6505d89f8d1d655e9d07a
+2026-02-21 00:00:42  2026-02-21 00:00:42,723 INFO vozlia_ng OPENAI_WS_CONNECTED
+2026-02-21 00:00:42  2026-02-21 00:00:42,724 INFO vozlia_ng OPENAI_SESSION_UPDATE_SENT
+2026-02-21 00:00:42  2026-02-21 00:00:42,726 INFO vozlia_ng OPENAI_SESSION_CREATED keys=['object', 'id', 'model', 'modalities', 'instructions', 'voice', 'output_audio_format', 'tools', 'tool_choice', 'temperature', 'max_response_output_tokens', 'turn_detection', 'speed', 'tracing', 'truncation', 'prompt', 'expires_at', 'input_audio_noise_reduction', 'input_audio_format', 'input_audio_transcription', 'client_secret', 'include'] output_modalities=['audio', 'text']
+2026-02-21 00:00:42  2026-02-21 00:00:42,770 INFO vozlia_ng OPENAI_SESSION_UPDATED keys=['object', 'id', 'model', 'modalities', 'instructions', 'voice', 'output_audio_format', 'tools', 'tool_choice', 'temperature', 'max_response_output_tokens', 'turn_detection', 'speed', 'tracing', 'truncation', 'prompt', 'expires_at', 'input_audio_noise_reduction', 'input_audio_format', 'input_audio_transcription', 'client_secret', 'include'] output_modalities=['audio', 'text']
+2026-02-21 00:00:44  2026-02-21 00:00:44,710 INFO vozlia_ng OPENAI_INPUT_COMMIT_SENT reason=speech_stopped
+2026-02-21 00:00:45  2026-02-21 00:00:45,018 INFO vozlia_ng OPENAI_TRANSCRIPT completed len=6 turn=1
+2026-02-21 00:00:45  2026-02-21 00:00:45,024 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.transcript_completed tenant_id=tenant_demo rid=CAe39412bf92d6505d89f8d1d655e9d07a
+2026-02-21 00:00:45  2026-02-21 00:00:45,025 INFO vozlia_ng OPENAI_RESPONSE_CREATE_SENT rid=1 modalities=['audio', 'text']
+2026-02-21 00:00:45  2026-02-21 00:00:45,077 INFO vozlia_ng OPENAI_RESPONSE_CREATED id=resp_DBUiLOmE0xoJ3GspodJTe
+2026-02-21 00:00:45  2026-02-21 00:00:45,357 INFO vozlia_ng OPENAI_AUDIO_DELTA_FIRST response_id=resp_DBUiLOmE0xoJ3GspodJTe bytes=800
+2026-02-21 00:00:45  2026-02-21 00:00:45,424 INFO vozlia_ng TWILIO_MAIN_FRAME_SENT first=1 response_id=resp_DBUiLOmE0xoJ3GspodJTe bytes=960 q_main=19
+2026-02-21 00:00:45  2026-02-21 00:00:45,884 INFO vozlia_ng OPENAI_RESPONSE_DONE id=resp_DBUiLOmE0xoJ3GspodJTe output_modalities=None
+2026-02-21 00:00:45  2026-02-21 00:00:45,884 INFO vozlia_ng speech_ctrl_ACTIVE_DONE type=response.done response_id=resp_DBUiLOmE0xoJ3GspodJTe dt_ms=806
+2026-02-21 00:00:45  2026-02-21 00:00:45,884 INFO vozlia_ng AUDIO_HEALTH response_id=resp_DBUiLOmE0xoJ3GspodJTe score=ok frames=145 chunks=11 bytes=23200 same_ratio=0.00 same_run_max=1 low_div_ratio=0.12 silence_ratio=0.00
+2026-02-21 00:00:45  2026-02-21 00:00:45,891 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.response_done tenant_id=tenant_demo rid=CAe39412bf92d6505d89f8d1d655e9d07a
+2026-02-21 00:00:45  2026-02-21 00:00:45,891 INFO vozlia_ng Response resp_DBUiLOmE0xoJ3GspodJTe finished with event 'response.done'; clearing active_response_id
+2026-02-21 00:00:48  2026-02-21 00:00:48,630 INFO vozlia_ng OpenAI VAD: user speech START
+2026-02-21 00:00:48  2026-02-21 00:00:48,630 INFO vozlia_ng OPENAI_SPEECH_STARTED turn=2
+2026-02-21 00:00:51  clientIP="3.89.144.80" requestID="" responseTimeMS=8868 responseBytes=0 userAgent="Twilio.TmeWs/1.0"
+2026-02-21 00:00:51  INFO:     connection closed
+2026-02-21 00:00:54  clientIP="74.101.122.21" requestID="712a9da4-9435-4aee" responseTimeMS=16 responseBytes=1245 userAgent="curl/8.7.1"
+2026-02-21 00:00:54  INFO:     74.101.122.21:0 - "GET /owner/events?tenant_id=tenant_demo&limit=50 HTTP/1.1" 200 OK
+capture_render_logs: render query failed; retrying without advancing cursor start=2026-02-21T00:01:25Z end=2026-02-21T00:01:27Z
+Error: error listing logs: received response code 500: internal server error
+Usage:
+  render logs [flags]
+Flags:
+      --direction enum        The direction to query the logs. Can be 'forward' or 'backward' (default )
+      --end time              The end time of the logs to query (default )
+  -h, --help                  help for logs
+      --host strings          A list of comma separated hosts to query
+      --instance strings      A list of comma separated instance IDs to query
+      --level enum            A list of comma separated log levels to query
+      --limit int             The maximum number of logs to return (default 100)
+      --method enum           A list of comma separated HTTP methods to query
+      --path strings          A list of comma separated paths to query
+  -r, --resources strings     A list of comma separated resource IDs to query. Required in non-interactive mode.
+      --start time            The start time of the logs to query (default )
+      --status-code strings   A list of comma separated status codes to query
+      --tail                  Stream new logs
+      --text strings          A list of comma separated strings to search for in the logs
+      --type enum             A list of comma separated log types to query
+Global Flags:
+      --confirm         set to skip confirmation prompts
+  -o, --output string   interactive, json, yaml, or text (default "interactive")

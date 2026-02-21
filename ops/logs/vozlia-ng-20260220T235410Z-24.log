@@ -1,0 +1,20 @@
+2026-02-20 23:54:06  [0;32m[1m==> [0m[1mDetected service running on port 10000[0m
+2026-02-20 23:54:06  [0;32m[1m==> [0m[1mDocs on specifying a port: https://render.com/docs/web-services#port-binding[0m
+2026-02-20 23:58:33  clientIP="74.101.122.21" requestID="dc535b81-48c3-4ae8" responseTimeMS=59 responseBytes=220 userAgent="curl/8.7.1"
+2026-02-20 23:58:59  clientIP="3.93.190.130" requestID="e5d59aed-9606-4af0" responseTimeMS=19 responseBytes=531 userAgent="TwilioProxy/1.1"
+2026-02-20 23:59:07  clientIP="98.80.128.109" requestID="b0dc39a2-90e5-490a" responseTimeMS=4 responseBytes=677 userAgent="TwilioProxy/1.1"
+2026-02-20 23:59:07  2026-02-20 23:59:07,766 INFO vozlia_ng vozlia_ng rid=CA34984be53956728e2a7fe357c1e84229 request received: /twilio/voice/access-code attempt=0 digits=12345678
+2026-02-20 23:59:07  2026-02-20 23:59:07,767 INFO vozlia_ng vozlia_ng rid=CA34984be53956728e2a7fe357c1e84229 ACCESS_CODE_ACCEPTED tenant_id=tenant_demo ai_mode=owner
+2026-02-20 23:59:07  2026-02-20 23:59:07,767 INFO vozlia_ng vozlia_ng rid=CA34984be53956728e2a7fe357c1e84229 routing decision: mode=shared to=+15186668613 tenant_id=tenant_demo ai_mode=owner
+2026-02-20 23:59:07  INFO:     98.80.128.109:0 - "POST /twilio/voice/access-code?attempt=0&rid=CA34984be53956728e2a7fe357c1e84229 HTTP/1.1" 200 OK
+2026-02-20 23:59:07  INFO:     34.229.211.202:0 - "WebSocket /twilio/stream" [accepted]
+2026-02-20 23:59:07  2026-02-20 23:59:07,855 INFO vozlia_ng TWILIO_WS_CONNECTED
+2026-02-20 23:59:07  INFO:     connection open
+2026-02-20 23:59:07  2026-02-20 23:59:07,860 INFO vozlia_ng TWILIO_WS_START streamSid=MZ5a0c23ce64ed36913a5da1cc77c64e5b callSid=CA34984be53956728e2a7fe357c1e84229 from=+19178057859 tenant=tenant_demo tenant_mode=shared rid=CA34984be53956728e2a7fe357c1e84229 ai_mode=owner
+2026-02-20 23:59:07  2026-02-20 23:59:07,860 INFO vozlia_ng VOICE_FLOW_A_START tenant_id=tenant_demo tenant_mode=shared rid=CA34984be53956728e2a7fe357c1e84229 ai_mode=owner
+2026-02-20 23:59:07  2026-02-20 23:59:07,860 INFO vozlia_ng VOICE_FLOW_A_MODE_SELECTED ai_mode=owner tenant_id=tenant_demo rid=CA34984be53956728e2a7fe357c1e84229
+2026-02-20 23:59:07  2026-02-20 23:59:07,867 INFO vozlia_ng FLOW_A_EVENT_EMITTED type=flow_a.call_started tenant_id=tenant_demo rid=CA34984be53956728e2a7fe357c1e84229
+2026-02-20 23:59:08  2026-02-20 23:59:08,509 INFO vozlia_ng OPENAI_WS_CONNECTED
+2026-02-20 23:59:08  2026-02-20 23:59:08,509 INFO vozlia_ng OPENAI_SESSION_UPDATE_SENT
+2026-02-20 23:59:08  2026-02-20 23:59:08,512 INFO vozlia_ng OPENAI_SESSION_CREATED keys=['object', 'id', 'model', 'modalities', 'instructions', 'voice', 'output_audio_format', 'tools', 'tool_choice', 'temperature', 'max_response_output_tokens', 'turn_detection', 'speed', 'tracing', 'truncation', 'prompt', 'expires_at', 'input_audio_noise_reduction', 'input_audio_format', 'input_audio_transcription', 'client_secret', 'include'] output_modalities=['audio', 'text']
+2026-02-20 23:59:08  2026-02-20 23:59:08,562 INFO vozlia_ng OPENAI_SESSION_UPDATED keys=['object', 'id', 'model', 'modalities', 'instructions', 'voice', 'output_audio_format', 'tools', 'tool_choice', 'temperature', 'max_response_output_tokens', 'turn_detection', 'speed', 'tracing', 'truncation', 'prompt', 'expires_at', 'input_audio_noise_reduction', 'input_audio_format', 'input_audio_transcription', 'client_secret', 'include'] output_modalities=['audio', 'text']

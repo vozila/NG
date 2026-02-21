@@ -20,6 +20,7 @@ mkdir -p "${OUT_DIR}"
 
 LOG_PREFIX="${LOG_PREFIX:-vozlia-ng}"
 INTERVAL_S="${INTERVAL_S:-2}"
+MAX_BACKOFF_S="${MAX_BACKOFF_S:-30}"
 ROTATE_SECONDS="${ROTATE_SECONDS:-300}"
 ROTATE_BYTES="${ROTATE_BYTES:-10485760}"
 MAX_FILES="${MAX_FILES:-40}"
@@ -135,6 +136,32 @@ sanitize_line() {
 }
 
 new_log_file
+consecutive_failures=0
+
+compute_sleep_s() {
+  # Exponential backoff on consecutive failures, capped.
+  local fail_count="$1"
+  local base="${INTERVAL_S}"
+  local sleep_s="${base}"
+  if (( fail_count > 0 )); then
+    local mult=1
+    local i
+    for ((i = 0; i < fail_count; i++)); do
+      mult=$((mult * 2))
+      if (( mult >= 32 )); then
+        break
+      fi
+    done
+    sleep_s=$((base * mult))
+  fi
+  if (( sleep_s > MAX_BACKOFF_S )); then
+    sleep_s="${MAX_BACKOFF_S}"
+  fi
+  if (( sleep_s < 1 )); then
+    sleep_s=1
+  fi
+  printf '%s\n' "${sleep_s}"
+}
 
 while true; do
   if [[ -n "${RENDER_RESOURCE_ID}" ]]; then
@@ -144,20 +171,34 @@ while true; do
     END_ISO="$(iso_now)"
     query_out=""
     if query_out="$(render logs -o text -r "${RENDER_RESOURCE_ID}" --start "${START_ISO}" --end "${END_ISO}" --direction forward --limit "${FETCH_LIMIT}" 2>&1)"; then
+      consecutive_failures=0
       while IFS= read -r line; do
         [[ -z "${line}" ]] && continue
         append_line "${line}"
       done <<< "${query_out}"
       START_ISO="${END_ISO}"
     else
+      consecutive_failures=$((consecutive_failures + 1))
+      sleep_s="$(compute_sleep_s "${consecutive_failures}")"
       append_line "capture_render_logs: render query failed; retrying without advancing cursor start=${START_ISO} end=${END_ISO}"
       while IFS= read -r line; do
         [[ -z "${line}" ]] && continue
+        # Keep the meaningful error lines, drop repetitive CLI usage/help noise.
+        case "${line}" in
+          "Usage:"*|"Flags:"*|"Global Flags:"*|"  -h, --help"*|"  -o, --output"*|"  -r, --resources"*|"      --"*|"  - "*)
+            continue
+            ;;
+        esac
         append_line "${line}"
       done <<< "${query_out}"
+      append_line "capture_render_logs: backoff sleep_s=${sleep_s} consecutive_failures=${consecutive_failures}"
     fi
     prune_old_files
-    sleep "${INTERVAL_S}"
+    if (( consecutive_failures > 0 )); then
+      sleep "$(compute_sleep_s "${consecutive_failures}")"
+    else
+      sleep "${INTERVAL_S}"
+    fi
     continue
   fi
 

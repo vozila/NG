@@ -113,6 +113,41 @@ curl -sS "$BASE_URL/owner/insights/summary?tenant_id=<TENANT_ID>" \
   -H "Authorization: Bearer $VOZ_OWNER_API_KEY"
 ```
 
+### Bundle 3 closeout checklist (portal integration)
+Preflight env (portal):
+- `VOZLIA_CONTROL_BASE_URL`
+- `VOZLIA_ADMIN_KEY`
+- `NEXTAUTH_URL`
+- `NEXTAUTH_SECRET`
+
+Preflight env/flags (backend where applicable):
+- `VOZ_FEATURE_OWNER_INBOX=1`
+- `VOZ_OWNER_INBOX_ENABLED=1`
+
+Operator-run portal API checks (requires authenticated session cookie):
+```bash
+curl -sS "http://localhost:3000/api/admin/owner-inbox/leads?tenant_id=<TENANT_ID>&limit=5" \
+  -H "Cookie: <session-cookie>"
+
+curl -sS -X POST "http://localhost:3000/api/admin/owner-inbox/actions" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: <session-cookie>" \
+  -d '{"tenant_id":"<TENANT_ID>","rid":"<RID>","action":"qualify","payload":{"score":90,"notes":"qualified from UI"}}'
+
+curl -sS -X POST "http://localhost:3000/api/admin/owner-inbox/actions" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: <session-cookie>" \
+  -d '{"tenant_id":"<TENANT_ID>","rid":"<RID>","action":"mark_handled","payload":{"handled":true,"handled_by":"owner_ui"}}'
+
+curl -sS "http://localhost:3000/api/admin/owner-inbox/appt-requests?tenant_id=<TENANT_ID>&limit=5" \
+  -H "Cookie: <session-cookie>"
+```
+
+Expected signatures:
+- Leads/appt endpoints return JSON with `ok` and non-error payload.
+- Actions endpoint returns success marker (`ok`/`success`) and no `4xx/5xx`.
+- UI smoke: row transitions to qualified, then handled.
+
 ## Bundle 4 gate (goal wizard → playbook → scheduler)
 
 ### API checks
@@ -141,4 +176,3 @@ curl -sS -X POST "$BASE_URL/admin/scheduler/tick" \
 - Log files reviewed (`ops/logs/...`):
 - Pass/Fail:
 - If not run by agent: exact commands provided to operator.
-

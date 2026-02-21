@@ -258,6 +258,34 @@ What changed:
   - `ops/TASKBOARD.md`
   - `ops/CHECKPOINT.md`
   - `ops/AGENT_BUNDLES.md`
+
+## 2026-02-20 — Bundle B003 Agent C verification capture (portal repo)
+
+What changed:
+- Captured Bundle B003 Agent C verification output for portal-only scope (`../vozlia-admin`), with mandatory sections:
+  - `Verification Commands`
+  - `Expected Output Signatures`
+  - `Render Env Changes Required`
+  - `OPERATOR-RUN` items
+- Confirmed no NG backend/ops code edits were made by Agent C.
+
+Verification command results:
+- `cd ../vozlia-admin && npm run lint` -> exit `1` (pre-existing unrelated lint debt).
+- `cd ../vozlia-admin && npx tsc --noEmit` -> exit `0`.
+- `cd ../vozlia-admin && npm run build` -> exit `0`.
+- `cd ../vozlia-admin && npm test` -> exit `1` (no `test` script in `package.json`).
+- `cd NG && bash scripts/bundle_gate_checklist.sh B003` -> exit `0`.
+
+OPERATOR-RUN pending:
+- UI smoke for owner inbox qualification/handled flow.
+- Authenticated portal proxy curls for:
+  - `/api/admin/owner-inbox/leads`
+  - `/api/admin/owner-inbox/actions`
+  - `/api/admin/owner-inbox/appt-requests`
+
+Render/env requirements captured:
+- Portal env: `VOZLIA_CONTROL_BASE_URL`, `VOZLIA_ADMIN_KEY`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`.
+- Backend flags/endpoints: owner inbox endpoints available and feature gates enabled where applicable.
   - `.agents/tasks/TASK-0401.md`, `.agents/tasks/TASK-0402.md`, `.agents/tasks/TASK-0403.md`
 - Normalized active bundle task statuses to DONE and retained non-overlapping ownership boundaries.
 

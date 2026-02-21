@@ -88,6 +88,13 @@
 - [x] TASK-0403 — 3-agent bundle orchestration (ops memory spine sync)
       - Assignment/status sync completed across AGENTS + ops memory spine.
       - Consistency and log-reference verification captured in `.agents/tasks/TASK-0403.md`.
+- [x] Bundle B003 — Agent C (portal UI slices) delivery captured
+      - Portal repo only (`../vozlia-admin`): inbox actions + notification settings + appointment requests UI paths delivered.
+      - Verification command outputs captured with required sections:
+        - `Verification Commands`
+        - `Expected Output Signatures`
+        - `Render Env Changes Required`
+      - Runtime/live checks are operator-run due auth/session + backend dependency.
 
 ## NOW (next high-leverage work)
 - [ ] TASK-0207 — Mode-aware capability gating (MVP env-only; **fail closed**)
@@ -104,6 +111,10 @@
 - [ ] Flow A: refine barge-in / clear semantics (anti-regression)
       - Ensure `TWILIO_CLEAR_SENT` only on actual `speech_started`
       - Add deterministic tests for: (a) user interrupts mid-response, (b) silence/noise edge cases
+- [ ] Bundle B003 closeout (operator-run evidence consolidation)
+      - Run portal API smoke checks with authenticated session cookie.
+      - Attach command outputs to `ops/JOURNAL.md`.
+      - Confirm backend owner inbox endpoints + flags in deployed environment.
 
 ## NEXT (blocked / staged)
 - [ ] Unified engine router interface (shared across voice/whatsapp/portal)
